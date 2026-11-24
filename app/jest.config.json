@@ -1,0 +1,10 @@
+{
+  "preset": "react-native",
+  "testRegex": "/test/.*\\.(test|spec)\\.(ts|tsx|js)$",
+  "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"],
+  "moduleNameMapper": {
+    "\\.(png|jpg|jpeg|gif)$": "<rootDir>/test/fileStub.js"
+  },
+  "setupFiles": ["<rootDir>/test/setup.js"],
+  "transformIgnorePatterns": ["node_modules/(?!(react-native|@react-native|@amazon-devices)/)"]
+}

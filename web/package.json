@@ -1,0 +1,11 @@
+{
+  "name": "castair-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CastAir sharing page and TV receiver page",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

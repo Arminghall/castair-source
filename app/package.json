@@ -1,0 +1,51 @@
+{
+  "name": "castair",
+  "version": "4.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "start": "react-native start",
+    "build:release": "react-native build-vega --build-type Release",
+    "build:debug": "react-native build-vega --build-type Debug",
+    "build": "npm run build:release",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@amazon-devices/kepler-identifiers": "^0.2.7",
+    "@amazon-devices/keplerscript-appstore-iap-lib": "~2.13.0",
+    "@amazon-devices/react-native-async-storage__async-storage": "~2.1.9000000002",
+    "@amazon-devices/react-native-device-info": "~2.1",
+    "@amazon-devices/react-native-kepler": "~4.0.0",
+    "@amazon-devices/react-native-w3cmedia": "~2.3.2",
+    "@amazon-devices/security-manager-lib": "~1.0.1767254405",
+    "@amazon-devices/webview": "^4.0.5",
+    "castair-native": "file:../native/castair-native-0.1.0.tgz",
+    "castair-surface": "file:../native-view/castair-surface-0.1.0.tgz",
+    "react": "19.2.0",
+    "react-native": "0.83.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@amazon-devices/kepler-cli-platform": "^0",
+    "@react-native-community/cli": "20.0.0",
+    "@react-native/babel-preset": "0.83.0",
+    "@react-native/metro-config": "0.83.0",
+    "@react-native/typescript-config": "0.83.0",
+    "@testing-library/react-native": "^13.3.3",
+    "@types/jest": "^29.5.14",
+    "@types/react": "^19.2.0",
+    "babel-jest": "^29.7.0",
+    "jest": "^29.7.0",
+    "react-test-renderer": "^19.2.0",
+    "typescript": "5.8.3"
+  },
+  "kepler": {
+    "projectType": "application",
+    "appName": "CastAir",
+    "targets": [
+      "tv"
+    ]
+  }
+}

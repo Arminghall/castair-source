@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- CastAir icon (option A, 2026-11-18). Copyright (C) 2026 Arminghall. -->
+  <rect width="512" height="512" rx="112" fill="#174D3A"/>
+  <rect x="150" y="150" width="250" height="180" rx="28" fill="none" stroke="#FAF8F2" stroke-width="30"/>
+  <path d="M234 362 h82" stroke="#FAF8F2" stroke-width="30" stroke-linecap="round"/>
+  <path d="M92 205 h120 M70 245 h170 M106 285 h100" stroke="#7FD9B0" stroke-width="26" stroke-linecap="round"/>
+</svg>

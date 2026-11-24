@@ -1,0 +1,513 @@
+/* CastAir sharing page. Palette from app/src/config.ts and the icon. */
+:root {
+  --pine: #0f3328;
+  --forest: #174d3a;
+  --deep: #0a241c;
+  --mint: #7fd9b0;
+  --cream: #faf8f2;
+  --moss: #a9c2b7;
+  --coral: #f2a998;
+  --display: ui-rounded, 'SF Pro Rounded', 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  --text: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+  font-family: var(--text);
+  color: var(--cream);
+  background: var(--deep);
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Hero: the air behind a glass panel */
+.hero {
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: 24px 20px 40px;
+  background: var(--pine);
+  overflow: hidden;
+}
+.air {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+.s {
+  stroke: var(--mint);
+  stroke-dasharray: 220 140;
+  animation: drift 26s linear infinite;
+}
+.s1 {
+  stroke-width: 10;
+  opacity: 0.18;
+  animation-duration: 30s;
+}
+.s2 {
+  stroke-width: 16;
+  opacity: 0.28;
+  animation-duration: 24s;
+}
+.s3 {
+  stroke-width: 22;
+  opacity: 0.42;
+  stroke-dasharray: 340 120;
+  animation-duration: 20s;
+}
+.s4 {
+  stroke-width: 16;
+  opacity: 0.3;
+  animation-duration: 23s;
+}
+.s5 {
+  stroke-width: 12;
+  opacity: 0.2;
+  animation-duration: 28s;
+}
+.s6 {
+  stroke-width: 8;
+  opacity: 0.12;
+  animation-duration: 34s;
+}
+.s7 {
+  stroke-width: 6;
+  opacity: 0.1;
+  animation-duration: 38s;
+}
+@keyframes drift {
+  to {
+    stroke-dashoffset: -720;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .s {
+    animation: none;
+  }
+}
+
+.bar {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+}
+.brand {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--cream);
+  text-decoration: none;
+  font-weight: 650;
+  font-size: 17px;
+}
+.brand img {
+  border-radius: 8px;
+}
+
+.panel {
+  align-self: center;
+  justify-self: center;
+  width: min(520px, 100%);
+  margin-top: 8px;
+  padding: 40px 36px 32px;
+  border-radius: 28px;
+  background: rgba(15, 51, 40, 0.62);
+  border: 1px solid rgba(127, 217, 176, 0.2);
+  box-shadow:
+    0 30px 80px rgba(3, 18, 13, 0.55),
+    inset 0 1px 0 rgba(250, 248, 242, 0.06);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+h1 {
+  font-family: var(--display);
+  font-weight: 750;
+  font-size: clamp(38px, 5.4vw, 56px);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  margin: 0 0 16px;
+  text-wrap: balance;
+}
+.lede {
+  color: var(--moss);
+  font-size: 17px;
+  line-height: 1.5;
+  margin: 0 0 28px;
+  max-width: 38ch;
+}
+
+/* TVs */
+.tvs {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.tvs button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  font: 600 17px/1.2 var(--text);
+  color: var(--cream);
+  cursor: pointer;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(250, 248, 242, 0.05);
+  border: 1px solid rgba(250, 248, 242, 0.12);
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.tvs button::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--mint);
+  box-shadow: 0 0 0 4px rgba(127, 217, 176, 0.15);
+}
+.tvs button:hover {
+  background: rgba(250, 248, 242, 0.09);
+}
+.tvs button[aria-pressed='true'] {
+  background: rgba(127, 217, 176, 0.14);
+  border-color: var(--mint);
+}
+.empty {
+  color: var(--moss);
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+/* Share code */
+.lock {
+  margin-left: -4px;
+}
+.code {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+  color: var(--moss);
+  font-size: 14px;
+}
+.code[hidden] {
+  display: none;
+}
+.code input {
+  font: 600 24px/1.2 var(--text);
+  letter-spacing: 0.4em;
+  width: 8ch;
+  color: var(--cream);
+  background: rgba(250, 248, 242, 0.06);
+  border: 1px solid rgba(250, 248, 242, 0.16);
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-top: 24px;
+}
+button.primary,
+a.primary,
+button.secondary {
+  font: 650 16px/1 var(--text);
+  padding: 15px 24px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 0;
+}
+button.primary,
+a.primary {
+  background: var(--cream);
+  color: var(--pine);
+}
+button.primary:hover:not(:disabled),
+a.primary:hover {
+  background: #fff;
+}
+button.primary:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+button.secondary {
+  background: rgba(250, 248, 242, 0.1);
+  color: var(--cream);
+  border: 1px solid rgba(250, 248, 242, 0.2);
+}
+.sound {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--moss);
+  cursor: pointer;
+  user-select: none;
+}
+.sound input {
+  appearance: none;
+  margin: 0;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(250, 248, 242, 0.2);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sound input::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--cream);
+  transition: transform 0.15s;
+}
+.sound input:checked {
+  background: var(--mint);
+}
+.sound input:checked::after {
+  transform: translateX(16px);
+  background: var(--pine);
+}
+.status {
+  min-height: 1.5em;
+  margin: 20px 0 0;
+  color: var(--moss);
+  line-height: 1.5;
+}
+.status.error {
+  color: var(--coral);
+}
+.notice {
+  background: rgba(242, 169, 152, 0.14);
+  border: 1px solid rgba(242, 169, 152, 0.35);
+  color: var(--cream);
+  border-radius: 14px;
+  padding: 12px 16px;
+  line-height: 1.5;
+}
+
+:focus-visible {
+  outline: 3px solid var(--mint);
+  outline-offset: 3px;
+}
+
+/* How it works */
+.how {
+  background: var(--deep);
+  padding: 28px 20px 18px;
+}
+.steps {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  text-align: center;
+  font-size: 15px;
+}
+.steps h3 {
+  font-family: var(--display);
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+}
+.steps p {
+  color: var(--moss);
+  margin: 0;
+  line-height: 1.5;
+}
+.apple {
+  text-align: center;
+  color: var(--moss);
+  margin: 18px auto 0;
+  font-size: 15px;
+}
+footer {
+  text-align: center;
+  margin: 14px auto 0;
+  color: var(--moss);
+  font-size: 13px;
+  opacity: 0.8;
+}
+.name {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  color: var(--moss);
+  font-size: 14px;
+}
+.name input {
+  font: inherit;
+  font-size: 16px;
+  color: var(--cream);
+  background: rgba(250, 248, 242, 0.06);
+  border: 1px solid rgba(250, 248, 242, 0.16);
+  border-radius: 14px;
+  padding: 11px 14px;
+  width: 100%;
+}
+footer a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(169, 194, 183, 0.5);
+}
+footer a:hover {
+  color: var(--cream);
+}
+
+@media (max-width: 640px) {
+  .panel {
+    padding: 28px 20px 24px;
+    border-radius: 22px;
+    margin-top: 16px;
+  }
+  .steps {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+/* Shorter laptop screens: keep everything on one screen. */
+@media (max-height: 800px) and (min-width: 641px) {
+  .hero {
+    padding-bottom: 20px;
+  }
+  .panel {
+    padding: 28px 30px 22px;
+  }
+  h1 {
+    font-size: 42px;
+    margin-bottom: 10px;
+  }
+  .lede {
+    margin-bottom: 18px;
+  }
+  .actions {
+    margin-top: 16px;
+  }
+  .name {
+    margin-top: 14px;
+  }
+  .status {
+    margin-top: 12px;
+  }
+  .how {
+    padding: 16px 20px 10px;
+  }
+  .apple {
+    margin-top: 10px;
+  }
+  footer {
+    margin-top: 8px;
+  }
+  .name {
+    gap: 6px;
+    margin-top: 12px;
+  }
+  .name input {
+    padding: 8px 12px;
+  }
+  h1 {
+    font-size: 40px;
+  }
+}
+
+/* Everything in the panel centred, like a single card. */
+.panel {
+  text-align: center;
+}
+.lede {
+  margin-left: auto;
+  margin-right: auto;
+}
+.tvs button {
+  justify-content: center;
+  text-align: center;
+}
+.actions {
+  justify-content: center;
+}
+.name {
+  justify-items: center;
+}
+.name input {
+  width: min(260px, 100%);
+  text-align: center;
+}
+.empty,
+.status {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 40ch;
+}
+
+/* Landing and text pages */
+a.button {
+  display: inline-block;
+  text-decoration: none;
+  font-size: 17px;
+  text-align: center;
+}
+body.doc {
+  background: var(--pine);
+  padding: 24px 20px 0;
+}
+.prose {
+  width: min(680px, 100%);
+  margin: 24px auto 0;
+  flex: 1;
+  line-height: 1.6;
+  color: var(--moss);
+}
+.prose h1 {
+  color: var(--cream);
+}
+.prose h2 {
+  font-family: var(--display);
+  color: var(--cream);
+  font-size: 20px;
+  margin: 28px 0 8px;
+}
+.prose b,
+.prose code {
+  color: var(--cream);
+}
+.prose a {
+  color: var(--mint);
+}
+.prose .muted {
+  margin: -8px 0 20px;
+  font-size: 14px;
+}
+.prose li {
+  margin-bottom: 6px;
+}

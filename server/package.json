@@ -1,0 +1,19 @@
+{
+  "name": "castair-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CastAir sharing page and WebRTC connection server",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -1,0 +1,10 @@
+GeoNames
+https://www.geonames.org
+
+CastAir's town search and place naming use the GeoNames "cities5000" place
+list (places with more than 5000 inhabitants), with its region and country
+names, packed into server/data/places.tsv.gz by server/scripts/build-places.mjs.
+
+GeoNames data is licensed under Creative Commons Attribution 4.0
+(https://creativecommons.org/licenses/by/4.0/). The data was reformatted
+(columns joined and trimmed); it is otherwise as published by GeoNames.

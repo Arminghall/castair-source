@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f3328" />
+    <meta name="description" content="How CastAir handles your data." />
+    <title>CastAir: Privacy</title>
+    <link rel="icon" href="castair-icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="doc">
+    <header class="bar">
+      <a class="brand" href="/"><img src="castair-icon.svg" alt="" width="32" height="32" />CastAir</a>
+    </header>
+    <main class="prose">
+      <h1>Privacy</h1>
+      <p class="muted">24 November 2026</p>
+      <p>CastAir is built to keep what you share to yourself. This page says exactly what it does with data.</p>
+
+      <h2>What you mirror</h2>
+      <p>
+        Your screen goes straight from your device to the TV, and nowhere else. It is never recorded, and it never
+        passes through CastAir's servers. The connection is direct; our server only introduces the two devices to each
+        other.
+      </p>
+
+      <h2>What CastAir's server receives</h2>
+      <ul>
+        <li>The TV's time zone, and the town you choose in the TV's Settings, to show the time and weather.</li>
+        <li>
+          Device and TV names, and IP addresses, used only to connect devices on the same network (a laptop is only
+          listed TVs on its own network).
+        </li>
+      </ul>
+      <p>
+        The server holds the time zone and town only while it answers the request, and device and TV names and IP
+        addresses only while the device is connected. To protect against abuse it also keeps two short-lived records:
+        a count of recent connection offers per network (your IP address, or the first half of an IPv6 address, with
+        timestamps) for about 10 minutes after the last one, and a count of wrong share codes for about 2 minutes.
+        CastAir's server writes nothing to disk and logs none of this. Cloudflare and the hosting provider may keep
+        standard request logs.
+      </p>
+
+      <h2>Purchases</h2>
+      <p>Purchases are handled by Amazon. CastAir's server never sees them.</p>
+
+      <h2>Wallpapers</h2>
+      <p>If you turn wallpapers on, the TV loads the photos directly from Unsplash.</p>
+
+      <h2>Analytics</h2>
+      <p>CastAir has no analytics and sends no crash reports.</p>
+
+      <h2>Contact</h2>
+      <p>Questions about privacy: <a href="mailto:castair@arminghall.com">castair@arminghall.com</a>.</p>
+    </main>
+    <section class="how">
+      <footer>
+        CastAir, <a href="https://arminghall.com">an Arminghall app</a> · <a href="/privacy">Privacy</a> ·
+        <a href="/support">Support</a> · <a href="/source">Source</a>
+      </footer>
+    </section>
+  </body>
+</html>

@@ -1,0 +1,98 @@
+schema-version = 1
+
+[package]
+title = "CastAir"
+icon = "@image/app_icon.png"
+# The build number, and the only release identifier (Appstore, git tag,
+# Sentry): scripts/build.sh passes it to the packager as --build-number.
+# Increase it for every Appstore upload.
+version = "4"
+id = "com.arminghall.castair"
+
+[os.version]
+min = "2.0"
+target = "2.0"
+
+[needs]
+[[needs.module]]
+id = "/com.amazon.kepler.webview_4@IWebview_4"
+
+# Persistent settings (app/src/storage.ts): the legacy AsyncStorage forgot
+# everything on restart (B12).
+[[needs.module]]
+id = "/com.amazon.kepler.async_storage__async_storage_2@IAsyncStorage__AsyncStorage_1"
+
+# Amazon in-app purchasing, for unlocking (app/src/Unlock.ts, B18).
+[[needs.module]]
+id = "/com.amazon.kepler.appstore.iap.purchase.core@IAppstoreIAPPurchaseCoreService"
+
+[[needs.privilege]]
+id = "com.amazon.network.privilege.net-info"
+
+# The Fire TV's own device name ("Lounge" → receiver "CastAir-Lounge"):
+# a run-time privilege the TV asks the viewer for once (app/src/DeviceName.ts).
+[[needs.privilege]]
+id = "com.amazon.devconf.privilege.identifiers.device-friendly-name"
+
+[wants]
+# Web renderer for the browser-share receiver page (WebView, DECISIONS B6).
+[[wants.service]]
+id = "com.amazon.webview.renderer_service"
+
+[[wants.service]]
+id = "com.amazon.inputmethod.service"
+
+[[wants.service]]
+id = "com.amazon.network.service"
+
+# Media services the W3C media player binds to (.claude/docs/DECISIONS.md D1).
+[[wants.service]]
+id = "com.amazon.mediametrics.service"
+
+[[wants.service]]
+id = "com.amazon.mediabuffer.service"
+
+[[wants.service]]
+id = "com.amazon.mediatransform.service"
+
+[[wants.service]]
+id = "com.amazon.audio.stream"
+
+[[wants.service]]
+id = "com.amazon.audio.control"
+
+[[wants.service]]
+id = "com.amazon.media.server"
+
+[[wants.service]]
+id = "com.amazon.media.playersession.service"
+
+[[wants.privilege]]
+id = "com.amazon.devconf.privilege.accessibility"
+
+[[wants.module]]
+id = "/com.amazon.kepler.net.net_manager@INetManager"
+
+# Amazon in-app purchasing (B18): the Appstore's purchase service and screens.
+[[wants.service]]
+id = "com.amazon.iap.core.service"
+
+[[wants.module]]
+id = "/com.amazon.iap.core@IIAPCoreUI"
+
+# BEGIN development-only
+# Amazon's App Tester, the purchase sandbox for test sticks. scripts/build.sh
+# removes everything between these markers from production builds.
+[[wants.service]]
+id = "com.amazon.iap.tester.service"
+
+[[wants.module]]
+id = "/com.amazonappstore.iap.tester@IIAPTesterUI"
+# END development-only
+
+[components]
+[[components.interactive]]
+id = "com.arminghall.castair.main"
+runtime-module = "/com.amazon.kepler.runtime.react_native_kepler_4@IReactNativeKepler_0"
+launch-type = "singleton"
+categories = ["com.amazon.category.main"]

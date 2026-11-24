@@ -1,0 +1,15 @@
+{
+  "type": "Feature",
+  "properties": {
+    "timeseries": [
+      {
+        "time": "2026-11-20T10:00:00Z",
+        "data": {
+          "instant": {"details": {"air_temperature": 7.4}},
+          "next_1_hours": {"summary": {"symbol_code": "cloudy"}},
+          "next_6_hours": {"summary": {"symbol_code": "rain"}}
+        }
+      }
+    ]
+  }
+}
