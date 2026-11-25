@@ -28,12 +28,27 @@ export type StandbyView = {
   onPhoto: boolean;
 };
 
+/** Which "how to connect" overlay a standby button opens. */
+export type ConnectKind = 'apple' | 'windows' | 'chrome';
+
 export type LayoutProps = {
   view: StandbyView;
   freeVersion?: boolean;
+  /** This week's free time left, for the free-version hint; null when not yet known. */
+  freeLeftMs?: number | null;
   onOpenSettings: () => void;
   /** The free-version hint opens the plans screen. */
   onOpenPlans?: () => void;
+  /** Paid TVs only: show the Windows button. */
+  showWindows?: boolean;
+  /** An Apple, Windows or Chrome button was pressed. */
+  onOpenConnect?: (kind: ConnectKind) => void;
+  /** Remove the button row and the free line, so nothing behind an overlay can take focus. */
+  hideButtons?: boolean;
+  /** The button whose overlay just closed: it takes the focus back. Unset, Settings keeps it. */
+  focusConnect?: ConnectKind | null;
+  /** The `focusConnect` button has the focus again. */
+  onConnectFocused?: () => void;
 };
 
 type ViewInput = {

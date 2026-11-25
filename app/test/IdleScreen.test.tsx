@@ -44,8 +44,10 @@ jest.mock('@amazon-devices/react-native-w3cmedia', () => {
   const {View} = require('react-native');
   return {KeplerVideoSurfaceView: View, VideoPlayer: jest.fn()};
 });
+// One stand-in for the whole file, so tests can see what the app asked of it.
+const mockKeepAwake = {set: jest.fn(), yieldToShare: jest.fn(), resume: jest.fn()};
 jest.mock('../src/KeepAwake', () => ({
-  KeepAwake: jest.fn().mockImplementation(() => ({set: jest.fn()})),
+  KeepAwake: jest.fn().mockImplementation(() => mockKeepAwake),
 }));
 
 // The test machine's locale is en-US; the TV in these tests is British.
@@ -80,7 +82,7 @@ it('shows CastAir, how to share and the settings link', async () => {
   await renderSettled();
   expect(screen.getAllByText('CastAir').length).toBeGreaterThan(0);
   expect(screen.getByText(/Screen Mirroring/)).toBeTruthy();
-  expect(screen.getByText(/castair\.app\/connect/)).toBeTruthy();
+  expect(screen.getByText(/castair\.app/)).toBeTruthy();
   expect(screen.getByText('Settings')).toBeTruthy();
   expect(screen.queryByText(/watermark/i)).toBeNull();
   // The previous app's name, spelled so the repo-wide name check skips it.
@@ -118,7 +120,7 @@ it('fits the how-to line inside the screen width', async () => {
         ? node.map(flatten).join('')
         : flatten((node as {props?: {children?: unknown}})?.props?.children ?? '');
   const text = flatten(line.props.children);
-  expect(text).toContain('castair.app/connect');
+  expect(text).toContain('castair.app');
   const {fontSize} = StyleSheet.flatten(line.props.style);
   expect(fontSize * text.length * GLYPH).toBeLessThanOrEqual(width * 0.9);
 });
@@ -233,7 +235,7 @@ it('flips the pill after 60 s of the receiver page having no server link', async
   await act(async () => {
     await jest.advanceTimersByTimeAsync(1_500);
   });
-  expect(screen.getByText('AirPlay only, laptop sharing unavailable')).toBeTruthy();
+  expect(screen.getByText('Screen Mirroring only, laptop sharing unavailable')).toBeTruthy();
   await fromPage({type: 'state', state: 'waiting'});
   expect(screen.getByText('CastAir is ready')).toBeTruthy();
 });
@@ -340,6 +342,42 @@ it("tells the receiver page the TV's name once the page is connected", async () 
   expect(probe.__injected).toContain('window.castairHost && window.castairHost.setName("CastAir-Front Room"); true;');
 });
 
+it('tells the keep-awake when a browser share starts and ends', async () => {
+  // A share with sound takes audio focus from the silent loop; it has to start again afterwards.
+  jest.useFakeTimers();
+  render(<App />);
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(100);
+  });
+  mockKeepAwake.yieldToShare.mockClear();
+
+  await fromPage({type: 'share-started', senderName: 'Windows laptop'});
+  expect(mockKeepAwake.yieldToShare.mock.calls).toEqual([[true]]);
+
+  await fromPage({type: 'share-ended'});
+  expect(mockKeepAwake.yieldToShare.mock.calls).toEqual([[true], [false]]);
+  jest.useRealTimers();
+});
+
+it('starts the keep-awake again on any return from the background', async () => {
+  const {AppState} = require('react-native');
+  const handlers: Array<(state: string) => void> = [];
+  const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_e: string, h: (s: string) => void) => {
+    handlers.push(h);
+    return {remove: jest.fn()};
+  }) as never);
+  render(<App />);
+  await waitFor(() => expect(Receiver.start).toHaveBeenCalled());
+  mockKeepAwake.resume.mockClear();
+
+  act(() => handlers.forEach((h) => h('background')));
+  expect(mockKeepAwake.resume).not.toHaveBeenCalled();
+  act(() => handlers.forEach((h) => h('active')));
+  expect(mockKeepAwake.resume).toHaveBeenCalledTimes(1);
+  // Keep a working subscription for later tests (restoring the stand-in loses it).
+  spy.mockImplementation((() => ({remove: jest.fn()})) as never);
+});
+
 it('reconnects the receiver page on any return from the background', async () => {
   const {AppState} = require('react-native');
   const handlers: Array<(state: string) => void> = [];
@@ -397,9 +435,11 @@ it("keeps the remembered name and retries when the Fire TV name can't be read", 
   AsyncStorage.getItem.mockImplementation(() => Promise.resolve(null));
 });
 
-describe('the 5-minute free cast', () => {
-  const BANNER = "1 minute left on this free cast · Unlock unlimited casts in CastAir's Settings";
-  const END_TITLE = 'Free casts last 5 minutes';
+describe('the weekly free allowance', () => {
+  const BANNER_5 = '5 minutes of free casting left this week';
+  const BANNER_1 = '1 minute of free casting left this week';
+  const END_TITLE = "This week's free casting is used up";
+  const MIN = 60_000;
   const endShareSent = () => (probe.__injected ?? []).some((js) => js.includes('castairHost.endShare()'));
   const advance = (ms: number) =>
     act(async () => {
@@ -407,6 +447,8 @@ describe('the 5-minute free cast', () => {
     });
   const start = async () => {
     jest.useFakeTimers();
+    // A Wednesday midday: nowhere near the Monday 05:00 reset, whatever the test machine's time zone.
+    jest.setSystemTime(Date.UTC(2026, 10, 25, 12, 0));
     const onEvent = Receiver.onEvent as jest.Mock;
     onEvent.mockClear();
     probe.__injected = [];
@@ -415,62 +457,76 @@ describe('the 5-minute free cast', () => {
     return onEvent.mock.calls.at(-1)[0] as (e: object) => void;
   };
 
-  it('a browser share warns at 4:00, ends at 5:00 and shows the plans, then standby after 60 s', async () => {
+  it('a browser share warns at 5 and 1 minutes left, ends at zero and shows the plans, then standby after 60 s', async () => {
     await start();
-    expect(screen.getByText('Free version · 5-minute casts')).toBeTruthy();
+    expect(screen.getByText('Free version · 30 min left this week')).toBeTruthy();
     await fromPage({type: 'share-started', senderName: 'Windows laptop'});
-    await advance(240_000);
-    expect(screen.getByText(BANNER)).toBeTruthy();
+    await advance(25 * MIN);
+    expect(screen.getByText(BANNER_5)).toBeTruthy();
+    await advance(4 * MIN);
+    expect(screen.getByText(BANNER_1)).toBeTruthy();
     expect(endShareSent()).toBe(false);
-    await advance(60_000);
+    await advance(MIN);
     expect(endShareSent()).toBe(true);
     await fromPage({type: 'share-ended'});
     expect(screen.getByText(END_TITLE)).toBeTruthy();
-    expect(screen.queryByText(BANNER)).toBeNull();
+    expect(screen.getByText('More free time on Monday at 05:00.')).toBeTruthy();
+    expect(screen.queryByText(BANNER_1)).toBeNull();
     await advance(60_000);
     expect(screen.queryByText(END_TITLE)).toBeNull();
     expect(screen.getByText('Settings')).toBeTruthy();
+    expect(screen.getByText('Free version · no free time left until Monday')).toBeTruthy();
   });
 
   it('an AirPlay cast ending while Settings is open stops AirPlay, shows the plans, and Back goes to standby', async () => {
     const emit = await start();
     fireEvent.press(screen.getByText('Settings'));
     act(() => emit({type: 'mirror_video_running', running: true}));
-    await advance(245_000);
-    expect(screen.getByText(BANNER)).toBeTruthy();
+    await advance(29 * MIN + 5_000);
+    expect(screen.getByText(BANNER_1)).toBeTruthy();
     (Receiver.stop as jest.Mock).mockClear();
     await advance(55_000);
     // The naming restart drops the AirPlay session.
     expect(Receiver.stop).toHaveBeenCalledTimes(1);
     act(() => emit({type: 'conn_destroy', connections: 0}));
     expect(screen.getByText(END_TITLE)).toBeTruthy();
-    expect(screen.queryByText(BANNER)).toBeNull();
+    expect(screen.queryByText(BANNER_1)).toBeNull();
     fireEvent.press(screen.getByText('Back'));
     expect(screen.queryByText(END_TITLE)).toBeNull();
     // Standby, not the Settings page that was open under the cast.
-    expect(screen.getByText(/castair\.app\/connect/)).toBeTruthy();
+    expect(screen.getByText(/castair\.app/)).toBeTruthy();
   });
 
-  it('a newcomer taking over at 4:59 gets a new 5 minutes', async () => {
+  it("standby and Settings show what's left after a cast", async () => {
     const emit = await start();
     act(() => emit({type: 'mirror_video_running', running: true}));
-    await advance(299_000);
+    await advance(10 * MIN);
+    act(() => emit({type: 'conn_destroy', connections: 0}));
+    expect(screen.getByText('Free version · 20 min left this week')).toBeTruthy();
+    fireEvent.press(screen.getByText('Settings'));
+    expect(screen.getByText('Free · 20 of 30 min left · resets Monday 05:00')).toBeTruthy();
+  });
+
+  it('a newcomer taking over carries on with what is left', async () => {
+    const emit = await start();
+    act(() => emit({type: 'mirror_video_running', running: true}));
+    await advance(29 * MIN + 59_000);
     await fromPage({type: 'share-started', senderName: 'Windows laptop'});
-    await advance(239_000);
-    expect(screen.queryByText(END_TITLE)).toBeNull();
     expect(endShareSent()).toBe(false);
-    await advance(61_000);
+    await advance(1_000);
     expect(endShareSent()).toBe(true);
   });
 
-  it('a new cast can start at once from the end screen', async () => {
+  it('a cast started from the end screen with nothing left is stopped at once', async () => {
     const emit = await start();
     act(() => emit({type: 'mirror_video_running', running: true}));
-    await advance(300_000);
+    await advance(30 * MIN);
     act(() => emit({type: 'conn_destroy', connections: 0}));
     expect(screen.getByText(END_TITLE)).toBeTruthy();
     await fromPage({type: 'share-started', senderName: 'Windows laptop'});
-    expect(screen.queryByText(END_TITLE)).toBeNull();
+    await advance(0);
+    expect(endShareSent()).toBe(true);
+    expect(screen.getByText(END_TITLE)).toBeTruthy();
   });
 
   it('a paying TV, offline at launch, is never warned or stopped', async () => {
@@ -486,8 +542,9 @@ describe('the 5-minute free cast', () => {
       const emit = await start();
       act(() => emit({type: 'mirror_video_running', running: true}));
       (Receiver.stop as jest.Mock).mockClear();
-      await advance(20 * 60_000);
-      expect(screen.queryByText(BANNER)).toBeNull();
+      await advance(40 * MIN);
+      expect(screen.queryByText(BANNER_5)).toBeNull();
+      expect(screen.queryByText(BANNER_1)).toBeNull();
       expect(screen.queryByText(END_TITLE)).toBeNull();
       expect(Receiver.stop).not.toHaveBeenCalled();
     } finally {
@@ -497,5 +554,150 @@ describe('the 5-minute free cast', () => {
         Promise.resolve({responseCode: 1, receiptList: [], hasMore: false}),
       );
     }
+  });
+});
+
+describe('connect overlays', () => {
+  const PAID = JSON.stringify({unlocked: true, kind: 'lifetime', checkedAt: Date.now()});
+  /** A paid TV: the unlocked state kept from an earlier run, Amazon unreachable so it stands. */
+  const paid = async (run: () => Promise<void>) => {
+    const {AsyncStorage} = require('../src/storage');
+    const {PurchasingService} = require('@amazon-devices/keplerscript-appstore-iap-lib');
+    AsyncStorage.getItem.mockImplementation((k: string) => Promise.resolve(k === 'unlock.state' ? PAID : null));
+    PurchasingService.getPurchaseUpdates.mockRejectedValue(new Error('offline'));
+    try {
+      await run();
+    } finally {
+      AsyncStorage.getItem.mockImplementation(() => Promise.resolve(null));
+      PurchasingService.getPurchaseUpdates.mockReset();
+      PurchasingService.getPurchaseUpdates.mockImplementation(() =>
+        Promise.resolve({responseCode: 1, receiptList: [], hasMore: false}),
+      );
+    }
+  };
+
+  it('Apple opens its overlay over standby, with the button row gone', async () => {
+    await renderSettled();
+    fireEvent.press(screen.getByTestId('connect-apple'));
+    expect(screen.getByTestId('connect-overlay')).toBeTruthy();
+    expect(screen.getByText('Share from an iPhone, iPad or Mac')).toBeTruthy();
+    expect(screen.getByText('Choose CastAir.')).toBeTruthy();
+    expect(screen.queryByTestId('standby-buttons')).toBeNull();
+    // The standby text steps aside; its wallpaper stays behind the overlay's glass.
+    expect(screen.queryByTestId('standby-layout')).toBeNull();
+    expect(screen.getByTestId('standby-streams')).toBeTruthy();
+  });
+
+  it('a browser share starting closes the overlay', async () => {
+    await renderSettled();
+    fireEvent.press(screen.getByTestId('connect-chrome'));
+    expect(screen.getByTestId('connect-overlay')).toBeTruthy();
+    await fromPage({type: 'share-started', senderName: 'Windows laptop'});
+    await fromPage({type: 'share-ended'});
+    expect(screen.queryByTestId('connect-overlay')).toBeNull();
+    expect(screen.getByTestId('standby-buttons')).toBeTruthy();
+  });
+
+  it('a sender connecting closes the overlay', async () => {
+    const onEvent = Receiver.onEvent as jest.Mock;
+    onEvent.mockClear();
+    await renderSettled();
+    fireEvent.press(screen.getByTestId('connect-apple'));
+    expect(screen.getByTestId('connect-overlay')).toBeTruthy();
+    await act(async () =>
+      onEvent.mock.calls.at(-1)[0]({type: 'client_request', name: 'iPhone', deviceid: 'x', model: 'y'}),
+    );
+    act(() => onEvent.mock.calls.at(-1)[0]({type: 'conn_destroy', connections: 0}));
+    expect(screen.queryByTestId('connect-overlay')).toBeNull();
+  });
+
+  it('a free TV has no Windows button', async () => {
+    await renderSettled();
+    await waitFor(() => expect(screen.getByText(/^Free version/)).toBeTruthy());
+    expect(screen.queryByTestId('connect-windows')).toBeNull();
+  });
+
+  it("on a paid TV, Enable Windows sharing opens the Fire TV's own sharing app", async () => {
+    const {Linking} = require('react-native');
+    const {MIRACAST_URI} = require('../src/ConnectOverlay');
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    try {
+      await paid(async () => {
+        await renderSettled();
+        fireEvent.press(await screen.findByTestId('connect-windows'));
+        expect(screen.getByText('Share from a Windows laptop')).toBeTruthy();
+        // The name privilege was denied in these tests.
+        expect(screen.getByText('Choose this Fire TV.')).toBeTruthy();
+        await act(async () => {
+          fireEvent.press(screen.getByTestId('enable-windows'));
+        });
+        expect(openURL).toHaveBeenCalledWith(MIRACAST_URI);
+      });
+    } finally {
+      openURL.mockRestore();
+    }
+  });
+
+  /** The hardware Back button, as the TV sends it to the newest listener. */
+  const pressBack = () => {
+    const {BackHandler} = require('react-native');
+    const calls = (BackHandler.addEventListener as jest.Mock).mock.calls.filter(
+      (c: unknown[]) => c[0] === 'hardwareBackPress',
+    );
+    act(() => {
+      calls[calls.length - 1][1]();
+    });
+  };
+  const preferred = (id: string) => screen.getByTestId(id).props.hasTVPreferredFocus === true;
+
+  it('Back closes the overlay and gives focus back to the button that opened it, once', async () => {
+    const {BackHandler} = require('react-native');
+    const spy = jest.spyOn(BackHandler, 'addEventListener');
+    try {
+      await renderSettled();
+      expect(preferred('connect-chrome')).toBe(false);
+      fireEvent.press(screen.getByTestId('connect-chrome'));
+      pressBack();
+      expect(screen.queryByTestId('connect-overlay')).toBeNull();
+      expect(preferred('connect-chrome')).toBe(true);
+      expect(preferred('connect-apple')).toBe(false);
+      // Once it has focus, the next time the row appears starts on Settings again.
+      fireEvent(screen.getByTestId('connect-chrome'), 'focus');
+      expect(preferred('connect-chrome')).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('the Windows overlay closes when the TV stops being paid', async () => {
+    const {PurchasingService} = require('@amazon-devices/keplerscript-appstore-iap-lib');
+    const advance = (ms: number) =>
+      act(async () => {
+        await jest.advanceTimersByTimeAsync(ms);
+      });
+    await paid(async () => {
+      jest.useFakeTimers();
+      render(<App />);
+      await advance(100);
+      fireEvent.press(screen.getByTestId('connect-windows'));
+      expect(screen.getByTestId('connect-overlay')).toBeTruthy();
+      // Amazon answers at the next try (a minute later): no purchases.
+      PurchasingService.getPurchaseUpdates.mockResolvedValue({responseCode: 1, receiptList: [], hasMore: false});
+      await advance(60_000);
+      expect(screen.queryByTestId('connect-overlay')).toBeNull();
+      expect(screen.queryByTestId('connect-windows')).toBeNull();
+    });
+  });
+
+  it('the Windows overlay names the Fire TV by its own name once allowed', async () => {
+    const {SecurityManager} = require('@amazon-devices/security-manager-lib');
+    const {KeplerIdentifiers} = require('@amazon-devices/kepler-identifiers');
+    SecurityManager.getPrivilegeState.mockResolvedValueOnce('ALLOW');
+    KeplerIdentifiers.getFriendlyDeviceName.mockResolvedValueOnce('Lounge');
+    await paid(async () => {
+      await renderSettled();
+      fireEvent.press(await screen.findByTestId('connect-windows'));
+      await waitFor(() => expect(screen.getByText('Choose Lounge.')).toBeTruthy());
+    });
   });
 });

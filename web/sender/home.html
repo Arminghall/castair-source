@@ -2,59 +2,156 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f3328" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#121214" />
     <meta
       name="description"
-      content="CastAir puts your screen on the TV: Screen Mirroring from iPhone, iPad and Mac, or share from a laptop browser." />
+      content="CastAir turns a Fire TV into a screen-sharing receiver for iPhone, iPad, Mac and any laptop. 30 minutes of free casting every week." />
     <title>CastAir: screen mirroring for your Fire TV</title>
     <link rel="icon" href="castair-icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="style.css" />
   </head>
-  <body>
+  <body class="standby about">
     <section class="hero">
-      <!-- The air: streams drawn like the lines in the CastAir icon, flowing into the panel. -->
-      <svg class="air" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <defs>
-          <radialGradient id="glow" cx="62%" cy="48%" r="45%">
-            <stop offset="0" stop-color="#2f7d60" stop-opacity="0.55" />
-            <stop offset="1" stop-color="#0f3328" stop-opacity="0" />
-          </radialGradient>
-        </defs>
-        <rect width="1440" height="900" fill="url(#glow)" />
-        <g fill="none" stroke-linecap="round">
-          <path class="s s1" d="M-80 210 C 260 170, 520 300, 760 360 S 1180 420, 1520 380" />
-          <path class="s s2" d="M-80 300 C 220 280, 480 360, 740 400 S 1160 450, 1520 470" />
-          <path class="s s3" d="M-80 400 C 240 400, 500 430, 760 440 S 1200 450, 1520 440" />
-          <path class="s s4" d="M-80 500 C 230 520, 500 480, 760 470 S 1180 470, 1520 520" />
-          <path class="s s5" d="M-80 610 C 260 640, 520 540, 760 500 S 1160 480, 1520 600" />
-          <path class="s s6" d="M-80 720 C 300 760, 560 600, 780 530 S 1200 520, 1520 700" />
-          <path class="s s7" d="M-80 120 C 320 80, 600 260, 800 330 S 1220 380, 1520 260" />
-        </g>
-      </svg>
-
       <header class="bar">
-        <a class="brand" href="/"><img src="castair-icon.svg" alt="" width="32" height="32" />CastAir</a>
+        <a class="brand shadowed" href="/about"><img src="castair-icon.svg" alt="" width="32" height="32" />CastAir</a>
+        <nav class="nav" aria-label="CastAir">
+          <a href="/">Share to a TV</a>
+          <a href="/support">Help</a>
+        </nav>
       </header>
 
-      <main class="panel">
-        <h1>Put your screen on&nbsp;the&nbsp;TV.</h1>
-        <p class="lede">
-          CastAir turns a Fire TV into a screen-sharing receiver. Use Screen Mirroring from iPhone, iPad and Mac, or
-          share from a laptop's Chrome or Edge. Nothing to install on the laptop.
-        </p>
-        <div class="actions">
-          <a class="primary button" href="/connect">Connect to a TV</a>
+      <div class="hero-body">
+        <div class="shadowed">
+          <h1>Screen mirroring for your Fire&nbsp;TV.</h1>
+          <p class="lede">
+            Put an iPhone, iPad, Mac or any laptop on the big screen in a few seconds. Nothing to install on the laptop,
+            and nothing to plug in.
+          </p>
+          <div class="cta">
+            <a class="primary" href="/">Share to a TV</a>
+            <span class="soon">Coming soon to the Amazon&nbsp;Appstore</span>
+          </div>
         </div>
-        <!-- Appstore link goes here once the listing is live. -->
-        <p class="status">Free casts last 5 minutes. Unlock unlimited casts in the TV app.</p>
-      </main>
+
+        <figure class="tv" aria-label="The CastAir standby screen on a TV" style="margin: 0">
+          <div class="screen" aria-hidden="true">
+            <div class="s-clock" data-clock>17:48</div>
+            <div class="s-date" data-date>Wednesday 25 November</div>
+            <div class="s-card">
+              <span class="s-pill">CastAir is ready</span>
+              <div class="s-name">CastAir-Meeting Room</div>
+              <div class="s-line">Use <b>Screen Mirroring</b> or <b>castair.app</b></div>
+              <div class="s-code">Code 4821</div>
+            </div>
+            <div class="s-rounds">
+              <span
+                ><i
+                  ><svg viewBox="0 0 24 24" fill="none" stroke="#faf8f2" stroke-width="3.4">
+                    <circle cx="12" cy="12" r="7" stroke-dasharray="3.1 2.4" />
+                    <circle cx="12" cy="12" r="2.6" stroke-width="2.4" /></svg></i
+                >Settings</span
+              >
+              <span
+                ><i><img src="icons/airplay.svg" alt="" /></i>AirPlay</span
+              >
+              <span
+                ><i><img src="icons/cast.svg" alt="" /></i>Cast</span
+              >
+            </div>
+            <div class="s-free">Free version · 30 min left this week</div>
+            <div class="s-credit" data-credit-text hidden></div>
+          </div>
+        </figure>
+      </div>
     </section>
-    <section class="how" aria-label="About CastAir">
-      <footer>
-        CastAir, <a href="https://arminghall.com">an Arminghall app</a> · <a href="/privacy">Privacy</a> ·
-        <a href="/support">Support</a> · <a href="/source">Source</a>
-      </footer>
+
+    <section class="section" aria-labelledby="ways-title">
+      <div class="inner">
+        <h2 id="ways-title">Three ways in, all from the device you already have.</h2>
+        <p class="sub">The TV shows how, too: each round button on its standby screen opens the steps.</p>
+        <div class="ways">
+          <article class="way">
+            <span class="disc"><img src="icons/airplay.svg" alt="" /></span>
+            <h3>AirPlay</h3>
+            <p class="who">iPhone, iPad and Mac</p>
+            <p>Open Control Centre, choose Screen Mirroring and pick the TV. Picture and sound, with no app to add.</p>
+          </article>
+          <article class="way">
+            <span class="disc"><img src="icons/cast.svg" alt="" /></span>
+            <h3>Cast from a browser</h3>
+            <p class="who">Any laptop, in Chrome or Edge</p>
+            <p>Go to <b>castair.app</b>, pick the TV, type the code it shows and share a screen, a window or a tab.</p>
+          </article>
+          <article class="way">
+            <span class="disc"><img src="icons/windows.svg" alt="" /></span>
+            <h3>Windows</h3>
+            <p class="who">Windows laptops</p>
+            <p>Choose <b>Enable Windows sharing</b> on the TV, then press Win+K on the laptop and pick the Fire TV.</p>
+            <span class="tag">With CastAir Unlimited</span>
+          </article>
+        </div>
+      </div>
     </section>
+
+    <section class="section" aria-labelledby="private-title" style="padding-top: 0">
+      <div class="inner">
+        <p class="promise" id="private-title">
+          Your screen goes straight to the TV. It never passes through our servers and it's never recorded.
+        </p>
+        <p>
+          CastAir only introduces your device to the TV on the same Wi-Fi. No accounts, no analytics.
+          <a href="/privacy">Read the privacy page</a>.
+        </p>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="plans-title" style="padding-top: 0">
+      <div class="inner">
+        <h2 id="plans-title">Free to use. Unlimited when you need it.</h2>
+        <p class="sub">Start free on any Fire TV. Upgrade in the TV app if your team casts every day.</p>
+        <div class="plans">
+          <article class="plan">
+            <h3>Free</h3>
+            <p class="big">30 min a week</p>
+            <p>
+              Every way in except Windows. The time refills on Monday at 05:00, and the TV warns you before it runs out.
+            </p>
+          </article>
+          <article class="plan unlimited">
+            <h3>CastAir Unlimited</h3>
+            <p class="big">No limit</p>
+            <p>Cast as long as you like, and share from Windows with Win+K.</p>
+            <ul>
+              <li>Monthly, yearly or a one-off lifetime purchase</li>
+              <li>Bought through Amazon, in the TV app</li>
+              <li>One purchase covers every TV on your Amazon account</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <footer class="site-foot">
+      <div class="inner foot">
+        <span>CastAir, <a href="https://arminghall.com">an Arminghall app</a></span>
+        <span><a href="/support">Help</a> · <a href="/privacy">Privacy</a> · <a href="/source">Source</a></span>
+      </div>
+    </footer>
+
+    <script type="module">
+      import {showWallpaper} from './wallpaper.js';
+      showWallpaper();
+      // The miniature TV keeps the real time, as the TV does.
+      const clock = document.querySelector('[data-clock]');
+      const date = document.querySelector('[data-date]');
+      const tick = () => {
+        const now = new Date();
+        clock.textContent = now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+        date.textContent = now.toLocaleDateString('en-GB', {weekday: 'long', day: 'numeric', month: 'long'});
+      };
+      tick();
+      setInterval(tick, 10_000);
+    </script>
   </body>
 </html>

@@ -25,6 +25,8 @@ type Props = {
   info: StandbyInfo | null;
   serverConnected: boolean;
   unlockState: UnlockState;
+  /** This week's free time left (FreeCast.tsx); null when unlocked or not yet known. */
+  freeLeftMs?: number | null;
   products: React.ComponentProps<typeof PlansScreen>['products'];
   productsLoaded?: boolean;
   onBuy: (sku: string) => Promise<'bought' | 'cancelled' | 'failed'>;
@@ -64,6 +66,7 @@ export const Settings = ({
   info,
   serverConnected,
   unlockState,
+  freeLeftMs = null,
   products,
   productsLoaded,
   onBuy,
@@ -132,6 +135,7 @@ export const Settings = ({
                 info={info}
                 serverConnected={serverConnected}
                 unlockState={unlockState}
+                freeLeftMs={freeLeftMs}
                 onPrefs={onPrefs}
                 onUseFireTvName={onUseFireTvName}
                 onOpenLocation={() => setTab('location')}

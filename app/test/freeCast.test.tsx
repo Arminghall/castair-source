@@ -1,102 +1,107 @@
 /*
- * Tests for the 5-minute free cast: the timer, the 4:00 banner and the end
- * screen (spec §6). Fake timers throughout.
+ * Tests for the weekly free allowance in the app: the timer, the 5- and
+ * 1-minute banners and the end screen (spec §3). Fake timers and a stubbed
+ * AsyncStorage throughout.
  *
  * Copyright (C) 2026 Arminghall
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import React from 'react';
+import React, {useLayoutEffect} from 'react';
 import {BackHandler, StyleSheet} from 'react-native';
 import {act, fireEvent, render, renderHook, screen} from '@testing-library/react-native';
 import {useTVEventHandler} from '@amazon-devices/react-native-kepler';
+import {ALLOWANCE_MS, SAVE_EVERY_MS} from '../src/Allowance';
 import {
+  BANNER_MS,
   END_IDLE_MS,
-  FREE_CAST_MS,
   FreeCastBanner,
   FreeCastEndScreen,
+  LOCKED_GRACE_MS,
   STOP_RETRY_MS,
-  WARN_AT_MS,
   useFreeCast,
   useFreeCastSession,
 } from '../src/FreeCast';
+import {AsyncStorage} from '../src/storage';
 import type {UnlockState} from '../src/Unlock';
 
-const BANNER = "1 minute left on this free cast · Unlock unlimited casts in CastAir's Settings";
+const BANNER_5 = '5 minutes of free casting left this week';
+const BANNER_1 = '1 minute of free casting left this week';
 const LOCKED: UnlockState = {unlocked: false, kind: null, checkedAt: null};
+const MIN = 60_000;
+// Wednesday 25 November 2026, 12:00 UTC; the TV is on UTC in these tests.
+const NOW = Date.UTC(2026, 10, 25, 12, 0);
+const WEEK = Date.UTC(2026, 10, 23, 5, 0);
+const NEXT_WEEK = Date.UTC(2026, 10, 30, 5, 0);
+
+const getItem = AsyncStorage.getItem as jest.Mock;
+const setItem = AsyncStorage.setItem as jest.Mock;
+/** What the TV has stored, as getItem gives it. */
+let stored: Record<string, string> = {};
+const storedAllowance = () =>
+  JSON.parse(setItem.mock.calls.filter((c: unknown[]) => c[0] === 'freeAllowance').at(-1)[1]);
 
 type Options = Parameters<typeof useFreeCast>[0];
 const onWarn = jest.fn();
 const onEnd = jest.fn();
 
-/** The hook, with a cast already running unless `over` says otherwise. */
-const cast = (over: Partial<Options> = {}) =>
-  renderHook(
-    (props: Partial<Options>) => useFreeCast({castKey: 1, active: true, unlocked: false, onWarn, onEnd, ...props}),
-    {
-      initialProps: over,
-    },
+/** Lets the stored allowance load (and any timers due) inside act(). */
+const advance = (ms: number) =>
+  act(async () => {
+    await jest.advanceTimersByTimeAsync(ms);
+  });
+
+/** The hook, with a cast already running unless `over` says otherwise; the stored state has loaded. */
+const cast = async (over: Partial<Options> = {}) => {
+  const view = renderHook(
+    (props: Partial<Options>) =>
+      useFreeCast({castKey: 1, active: true, unlocked: false, offsetMin: 0, onWarn, onEnd, ...props}),
+    {initialProps: over},
   );
+  await advance(0);
+  return view;
+};
 
 /** The hook driving the banner, as App uses them. */
 const BannerHost = (props: Partial<Options>) => {
-  const {warning} = useFreeCast({castKey: 1, active: true, unlocked: false, onWarn, onEnd, ...props});
-  return <FreeCastBanner visible={warning} />;
+  const {warningMs} = useFreeCast({castKey: 1, active: true, unlocked: false, offsetMin: 0, onWarn, onEnd, ...props});
+  return <FreeCastBanner leftMs={warningMs} />;
 };
-
-const advance = (ms: number) =>
-  act(() => {
-    jest.advanceTimersByTime(ms);
-  });
 
 beforeEach(() => {
   jest.useFakeTimers();
+  jest.setSystemTime(NOW);
   jest.clearAllMocks();
+  stored = {};
+  getItem.mockImplementation((k: string) => Promise.resolve(stored[k] ?? null));
 });
 afterEach(() => {
   jest.useRealTimers();
   jest.restoreAllMocks();
+  getItem.mockImplementation(() => Promise.resolve(null));
 });
 
-it('warns at 4:00 and ends at 5:00', () => {
-  const {result} = cast();
-  advance(WARN_AT_MS - 1);
-  expect(onWarn).not.toHaveBeenCalled();
-  expect(result.current.warning).toBe(false);
-  advance(1);
-  expect(onWarn).toHaveBeenCalledTimes(1);
-  expect(result.current.warning).toBe(true);
-  advance(FREE_CAST_MS - WARN_AT_MS - 1);
+it('counts only while the cast is live', async () => {
+  const view = await cast({active: false});
+  expect(view.result.current.remainingMs).toBe(ALLOWANCE_MS);
+  await advance(60 * MIN);
   expect(onEnd).not.toHaveBeenCalled();
-  advance(1);
-  expect(onEnd).toHaveBeenCalledTimes(1);
-  // With the cast it was armed for.
-  expect(onEnd).toHaveBeenCalledWith(1);
-  expect(result.current.warning).toBe(false);
-});
-
-it('asks again every 10 s while the ended cast is still on, and stops once it is off', () => {
-  const view = cast();
-  advance(FREE_CAST_MS);
-  expect(onEnd).toHaveBeenCalledTimes(1);
-  advance(STOP_RETRY_MS - 1);
-  expect(onEnd).toHaveBeenCalledTimes(1);
-  advance(1);
-  expect(onEnd).toHaveBeenCalledTimes(2);
-  expect(onEnd).toHaveBeenLastCalledWith(1);
-  advance(STOP_RETRY_MS);
-  expect(onEnd).toHaveBeenCalledTimes(3);
+  expect(view.result.current.remainingMs).toBe(ALLOWANCE_MS);
+  view.rerender({active: true});
+  await advance(10 * MIN);
   view.rerender({active: false});
-  expect(jest.getTimerCount()).toBe(0);
-  advance(FREE_CAST_MS * 2);
-  expect(onEnd).toHaveBeenCalledTimes(3);
-  expect(onWarn).toHaveBeenCalledTimes(1);
+  expect(view.result.current.remainingMs).toBe(20 * MIN);
+  await advance(60 * MIN);
+  expect(view.result.current.remainingMs).toBe(20 * MIN);
 });
 
-it('banner hides after 15 s', () => {
+it('banner at 5 minutes left, then at 1 minute left, each for 15 s', async () => {
   render(<BannerHost />);
-  expect(screen.queryByText(BANNER)).toBeNull();
-  advance(WARN_AT_MS);
-  const text = screen.getByText(BANNER);
+  await advance(0);
+  await advance(25 * MIN - 1);
+  expect(screen.queryByText(BANNER_5)).toBeNull();
+  await advance(1);
+  const text = screen.getByText(BANNER_5);
+  expect(onWarn).toHaveBeenLastCalledWith(5 * MIN);
   // Over the cast in a bottom corner, never in the way of the remote.
   let node = text.parent;
   while (node && node.props.pointerEvents === undefined) {
@@ -106,237 +111,368 @@ it('banner hides after 15 s', () => {
   const style = StyleSheet.flatten(node?.props.style);
   expect(style.position).toBe('absolute');
   expect(style.bottom).toBeDefined();
-  advance(15_000 - 1);
-  expect(screen.getByText(BANNER)).toBeTruthy();
-  advance(1);
-  expect(screen.queryByText(BANNER)).toBeNull();
-});
-
-it('unlocking mid-cast clears both timers', () => {
-  const view = render(<BannerHost />);
-  advance(WARN_AT_MS + 5_000);
-  expect(screen.getByText(BANNER)).toBeTruthy();
-  view.rerender(<BannerHost unlocked />);
-  // The banner goes at once, and nothing is left to end the cast.
-  expect(screen.queryByText(BANNER)).toBeNull();
-  expect(jest.getTimerCount()).toBe(0);
-  advance(FREE_CAST_MS * 2);
-  expect(onEnd).not.toHaveBeenCalled();
-  expect(onWarn).toHaveBeenCalledTimes(1);
-});
-
-it('a takeover at 4:59 restarts the 5 minutes', () => {
-  const view = render(<BannerHost castKey={1} />);
-  advance(WARN_AT_MS);
-  expect(screen.getByText(BANNER)).toBeTruthy();
-  advance(FREE_CAST_MS - WARN_AT_MS - 1_000);
-  // A newcomer takes over at 4:59 (the banner was gone by then; it mustn't come back stale).
-  view.rerender(<BannerHost castKey={2} />);
-  expect(screen.queryByText(BANNER)).toBeNull();
-  advance(1_000);
-  expect(onEnd).not.toHaveBeenCalled();
-  advance(WARN_AT_MS - 1_000 - 1);
-  expect(onWarn).toHaveBeenCalledTimes(1);
-  advance(1);
+  await advance(BANNER_MS - 1);
+  expect(screen.getByText(BANNER_5)).toBeTruthy();
+  await advance(1);
+  expect(screen.queryByText(BANNER_5)).toBeNull();
+  await advance(4 * MIN - BANNER_MS - 1);
+  expect(screen.queryByText(BANNER_1)).toBeNull();
+  await advance(1);
+  expect(screen.getByText(BANNER_1)).toBeTruthy();
+  expect(onWarn).toHaveBeenLastCalledWith(MIN);
+  await advance(BANNER_MS);
+  expect(screen.queryByText(BANNER_1)).toBeNull();
   expect(onWarn).toHaveBeenCalledTimes(2);
-  expect(screen.getByText(BANNER)).toBeTruthy();
-  advance(FREE_CAST_MS - WARN_AT_MS - 1);
+});
+
+it('stops at zero, with the cast it was armed for, and asks again every 10 s until the cast is off', async () => {
+  const view = await cast();
+  await advance(ALLOWANCE_MS - 1);
   expect(onEnd).not.toHaveBeenCalled();
-  advance(1);
+  await advance(1);
   expect(onEnd).toHaveBeenCalledTimes(1);
-});
-
-it('a takeover while the banner shows hides it at once', () => {
-  const view = render(<BannerHost castKey={1} />);
-  advance(WARN_AT_MS + 2_000);
-  expect(screen.getByText(BANNER)).toBeTruthy();
-  view.rerender(<BannerHost castKey={2} />);
-  expect(screen.queryByText(BANNER)).toBeNull();
-});
-
-it('cast ending before 5:00 clears timers', () => {
-  const view = render(<BannerHost castKey={1} />);
-  advance(WARN_AT_MS + 5_000);
-  expect(screen.getByText(BANNER)).toBeTruthy();
-  view.rerender(<BannerHost castKey={1} active={false} />);
-  expect(screen.queryByText(BANNER)).toBeNull();
-  expect(jest.getTimerCount()).toBe(0);
-  advance(FREE_CAST_MS);
-  expect(onEnd).not.toHaveBeenCalled();
-  // The next cast starts at once with a fresh 5 minutes: no cool-down.
-  view.rerender(<BannerHost castKey={2} active />);
-  advance(FREE_CAST_MS - 1);
-  expect(onEnd).not.toHaveBeenCalled();
-  advance(1);
+  expect(onEnd).toHaveBeenCalledWith(1);
+  expect(view.result.current.warningMs).toBeNull();
+  expect(view.result.current.remainingMs).toBe(0);
+  await advance(STOP_RETRY_MS - 1);
   expect(onEnd).toHaveBeenCalledTimes(1);
+  await advance(1);
+  expect(onEnd).toHaveBeenCalledTimes(2);
+  expect(onEnd).toHaveBeenLastCalledWith(1);
+  view.rerender({active: false});
+  await advance(STOP_RETRY_MS * 5);
+  expect(onEnd).toHaveBeenCalledTimes(2);
 });
 
-it('unlocked: nothing armed', () => {
-  const {result} = cast({unlocked: true});
+it('a cast that starts with nothing left is stopped at once', async () => {
+  stored.freeAllowance = JSON.stringify({weekStart: WEEK, usedMs: ALLOWANCE_MS});
+  const view = await cast({active: false});
+  expect(view.result.current.remainingMs).toBe(0);
+  view.rerender({active: true, castKey: 2});
+  await advance(0);
+  expect(onEnd).toHaveBeenCalledWith(2);
+});
+
+it('saves every 15 s during a cast and when it ends', async () => {
+  const view = await cast();
+  setItem.mockClear();
+  await advance(SAVE_EVERY_MS - 1);
+  expect(setItem).not.toHaveBeenCalled();
+  await advance(1);
+  expect(setItem).toHaveBeenCalledWith('freeAllowance', JSON.stringify({weekStart: WEEK, usedMs: SAVE_EVERY_MS}));
+  await advance(SAVE_EVERY_MS);
+  expect(storedAllowance()).toEqual({weekStart: WEEK, usedMs: 2 * SAVE_EVERY_MS});
+  await advance(4_000);
+  view.rerender({active: false});
+  expect(storedAllowance()).toEqual({weekStart: WEEK, usedMs: 2 * SAVE_EVERY_MS + 4_000});
+  const saves = setItem.mock.calls.length;
+  await advance(SAVE_EVERY_MS * 4);
+  expect(setItem).toHaveBeenCalledTimes(saves);
+});
+
+it("loads the stored state on mount; damaged or last week's data is a fresh week", async () => {
+  stored.freeAllowance = JSON.stringify({weekStart: WEEK, usedMs: 12 * MIN});
+  const view = await cast({active: false});
+  expect(view.result.current.remainingMs).toBe(18 * MIN);
+  view.unmount();
+  stored.freeAllowance = JSON.stringify({weekStart: WEEK - 7 * 24 * 60 * MIN, usedMs: ALLOWANCE_MS});
+  const lastWeek = await cast({active: false});
+  expect(lastWeek.result.current.remainingMs).toBe(ALLOWANCE_MS);
+  lastWeek.unmount();
+  stored.freeAllowance = '{not json';
+  const damaged = await cast({active: false});
+  expect(damaged.result.current.remainingMs).toBe(ALLOWANCE_MS);
+});
+
+it('nothing is timed before the stored state has loaded', async () => {
+  getItem.mockImplementation(() => new Promise(() => undefined));
+  const view = renderHook(() => useFreeCast({castKey: 1, active: true, unlocked: false, offsetMin: 0, onWarn, onEnd}));
+  expect(view.result.current.remainingMs).toBeNull();
+  await advance(ALLOWANCE_MS * 2);
+  expect(onEnd).not.toHaveBeenCalled();
+});
+
+it('a cast crossing Monday 05:00 is not stopped at the old week zero, and counts from 05:00', async () => {
+  // 5 minutes before the reset with 10 minutes left: the old week's zero would be at 05:05.
+  jest.setSystemTime(NEXT_WEEK - 5 * MIN);
+  stored.freeAllowance = JSON.stringify({weekStart: WEEK, usedMs: ALLOWANCE_MS - 10 * MIN});
+  const view = await cast();
+  await advance(5 * MIN);
+  // At the reset, 5 minutes of the old 10 were used; the cast carries on with a fresh 30.
+  await advance(10 * MIN);
+  expect(onEnd).not.toHaveBeenCalled();
+  view.rerender({active: false});
+  expect(view.result.current.remainingMs).toBe(ALLOWANCE_MS - 10 * MIN);
+  expect(storedAllowance()).toEqual({weekStart: NEXT_WEEK, usedMs: 10 * MIN});
+});
+
+it('a forward clock jump during a cast is charged at most 60 s and does not stop the cast', async () => {
+  const view = await cast();
+  await advance(SAVE_EVERY_MS);
+  // The TV's clock jumps 20 minutes (an NTP fix, say) before the next save tick.
+  jest.setSystemTime(Date.now() + 20 * MIN);
+  await advance(SAVE_EVERY_MS);
+  expect(onEnd).not.toHaveBeenCalled();
+  view.rerender({active: false});
+  const used = ALLOWANCE_MS - (view.result.current.remainingMs ?? 0);
+  expect(used).toBeGreaterThanOrEqual(2 * SAVE_EVERY_MS);
+  expect(used).toBeLessThanOrEqual(2 * SAVE_EVERY_MS + MIN);
+});
+
+it('on standby the new week shows at the reset', async () => {
+  jest.setSystemTime(NEXT_WEEK - MIN);
+  stored.freeAllowance = JSON.stringify({weekStart: WEEK, usedMs: ALLOWANCE_MS});
+  const view = await cast({active: false});
+  expect(view.result.current.remainingMs).toBe(0);
+  await advance(MIN);
+  expect(view.result.current.remainingMs).toBe(ALLOWANCE_MS);
+});
+
+it('ready: false times nothing and gives remainingMs null', async () => {
+  const view = await cast({ready: false});
+  expect(view.result.current.remainingMs).toBeNull();
   expect(jest.getTimerCount()).toBe(0);
-  advance(FREE_CAST_MS * 3);
+  await advance(ALLOWANCE_MS * 2);
   expect(onWarn).not.toHaveBeenCalled();
   expect(onEnd).not.toHaveBeenCalled();
-  expect(result.current.warning).toBe(false);
-});
-
-describe('before the unlocked state has loaded', () => {
-  it('nothing is armed', () => {
-    cast({ready: false});
-    expect(jest.getTimerCount()).toBe(0);
-    advance(FREE_CAST_MS * 2);
-    expect(onWarn).not.toHaveBeenCalled();
-    expect(onEnd).not.toHaveBeenCalled();
-  });
-
-  it('ready and unlocked: nothing arms for the running cast', () => {
-    const view = cast({ready: false});
-    advance(30_000);
-    view.rerender({ready: true, unlocked: true});
-    expect(jest.getTimerCount()).toBe(0);
-    advance(FREE_CAST_MS * 2);
-    expect(onEnd).not.toHaveBeenCalled();
-  });
-
-  it('ready and locked early: the 5 minutes count from the start of the cast', () => {
-    const view = cast({ready: false});
-    advance(60_000);
-    view.rerender({ready: true});
-    advance(WARN_AT_MS - 60_000 - 1);
-    expect(onWarn).not.toHaveBeenCalled();
-    advance(1);
-    expect(onWarn).toHaveBeenCalledTimes(1);
-    advance(FREE_CAST_MS - WARN_AT_MS);
-    expect(onEnd).toHaveBeenCalledTimes(1);
-  });
-
-  it('ready and locked late: warned at once, and ended no sooner than 60 s later', () => {
-    const view = cast({ready: false});
-    advance(270_000);
-    view.rerender({ready: true});
-    advance(0);
-    expect(view.result.current.warning).toBe(true);
-    expect(onWarn).toHaveBeenCalledTimes(1);
-    advance(60_000 - 1);
-    expect(onEnd).not.toHaveBeenCalled();
-    advance(1);
-    expect(onEnd).toHaveBeenCalledTimes(1);
-  });
-});
-
-it('a subscription that lapses mid-cast still gets the warning and a minute', () => {
-  const view = cast({unlocked: true});
-  advance(FREE_CAST_MS * 2);
-  view.rerender({unlocked: false});
-  advance(0);
-  expect(onWarn).toHaveBeenCalledTimes(1);
-  advance(60_000 - 1);
+  view.rerender({ready: true, unlocked: true});
+  expect(jest.getTimerCount()).toBe(0);
+  await advance(ALLOWANCE_MS * 2);
   expect(onEnd).not.toHaveBeenCalled();
-  advance(1);
-  expect(onEnd).toHaveBeenCalledTimes(1);
+});
+
+it('unlocked: remainingMs null, nothing armed and never stopped', async () => {
+  const view = await cast({unlocked: true});
+  expect(view.result.current.remainingMs).toBeNull();
+  expect(jest.getTimerCount()).toBe(0);
+  await advance(ALLOWANCE_MS * 3);
+  expect(onWarn).not.toHaveBeenCalled();
+  expect(onEnd).not.toHaveBeenCalled();
+  expect(view.result.current.warningMs).toBeNull();
+});
+
+it('unlocking mid-cast clears the banner and the timers', async () => {
+  const view = render(<BannerHost />);
+  await advance(0);
+  await advance(25 * MIN + 5_000);
+  expect(screen.getByText(BANNER_5)).toBeTruthy();
+  view.rerender(<BannerHost unlocked />);
+  expect(screen.queryByText(BANNER_5)).toBeNull();
+  expect(jest.getTimerCount()).toBe(0);
+  await advance(ALLOWANCE_MS * 2);
+  expect(onEnd).not.toHaveBeenCalled();
+  expect(onWarn).toHaveBeenCalledTimes(1);
+});
+
+it('a timer firing after the render that unlocks the TV, before its cleanup, stops nothing', async () => {
+  /** Fires `fireMs` of timers from a layout effect: after the unlocking render, before passive cleanups. */
+  const Host = ({unlocked, fireMs}: {unlocked: boolean; fireMs: number}) => {
+    useFreeCast({castKey: 1, active: true, unlocked, offsetMin: 0, onWarn, onEnd});
+    useLayoutEffect(() => {
+      if (unlocked) {
+        jest.advanceTimersByTime(fireMs);
+      }
+    }, [unlocked, fireMs]);
+    return null;
+  };
+  const view = render(<Host unlocked={false} fireMs={0} />);
+  await advance(0);
+  await advance(ALLOWANCE_MS - 1_000);
+  view.rerender(<Host unlocked fireMs={1_000} />);
+  expect(onEnd).not.toHaveBeenCalled();
+  await advance(STOP_RETRY_MS * 3);
+  expect(onEnd).not.toHaveBeenCalled();
+});
+
+describe('the 60 s grace when the TV turns out to be free mid-cast', () => {
+  it('purchases loading at startup with time left: the allowance counts from when the limit applied', async () => {
+    const view = await cast({ready: false});
+    await advance(MIN);
+    view.rerender({ready: true});
+    await advance(ALLOWANCE_MS - 1);
+    expect(onEnd).not.toHaveBeenCalled();
+    await advance(1);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('nothing left: warned at once with the 1-minute banner, and ended no sooner than 60 s later', async () => {
+    stored.freeAllowance = JSON.stringify({weekStart: WEEK, usedMs: ALLOWANCE_MS});
+    const view = await cast({unlocked: true});
+    await advance(10 * MIN);
+    // A subscription lapses mid-cast.
+    view.rerender({unlocked: false});
+    await advance(0);
+    expect(view.result.current.warningMs).toBe(MIN);
+    expect(onWarn).toHaveBeenCalledTimes(1);
+    await advance(LOCKED_GRACE_MS - 1);
+    expect(onEnd).not.toHaveBeenCalled();
+    await advance(1);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('with allowance left, the allowance wins over the grace', async () => {
+    stored.freeAllowance = JSON.stringify({weekStart: WEEK, usedMs: ALLOWANCE_MS - 3 * MIN});
+    const view = await cast({unlocked: true});
+    view.rerender({unlocked: false});
+    await advance(LOCKED_GRACE_MS);
+    expect(onEnd).not.toHaveBeenCalled();
+    await advance(3 * MIN - LOCKED_GRACE_MS);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('cast session', () => {
   const onStop = jest.fn();
   type SessionOptions = Parameters<typeof useFreeCastSession>[0];
-  const session = (over: Partial<SessionOptions> = {}) =>
-    renderHook(
+  const session = async (over: Partial<SessionOptions> = {}) => {
+    const view = renderHook(
       (props: Partial<SessionOptions>) =>
-        useFreeCastSession({mode: 'idle', audio: false, unlocked: false, onStop, ...props}),
+        useFreeCastSession({mode: 'idle', audio: false, unlocked: false, offsetMin: 0, onStop, ...props}),
       {initialProps: over},
     );
+    await advance(0);
+    return view;
+  };
 
-  it('ends at 5:00 by stopping the cast that ran out, and shows the end screen', () => {
-    const view = session({mode: 'airplay'});
+  it('stops the cast that ran out at zero, and shows the end screen', async () => {
+    const view = await session({mode: 'airplay'});
     act(() => view.result.current.startCast('airplay'));
-    advance(FREE_CAST_MS - 1);
+    await advance(ALLOWANCE_MS - 1);
     expect(view.result.current.ended).toBe(false);
-    advance(1);
+    await advance(1);
     expect(onStop.mock.calls).toEqual([['airplay']]);
     expect(view.result.current.ended).toBe(true);
   });
 
-  it('a timer armed for the old cast that fires during a takeover does nothing', () => {
-    const view = session({mode: 'airplay'});
+  it('two casts in a row share one allowance: 20 minutes, then 10 ends the second', async () => {
+    const view = await session({mode: 'airplay'});
     act(() => view.result.current.startCast('airplay'));
-    advance(FREE_CAST_MS - 1);
-    // A browser share takes over at 4:59.999, and the old timer fires before the next render.
+    await advance(20 * MIN);
+    view.rerender({mode: 'idle'});
+    expect(view.result.current.remainingMs).toBe(10 * MIN);
+    await advance(60 * MIN);
+    view.rerender({mode: 'browser'});
+    act(() => view.result.current.startCast('browser'));
+    await advance(10 * MIN - 1);
+    expect(onStop).not.toHaveBeenCalled();
+    await advance(1);
+    expect(onStop.mock.calls).toEqual([['browser']]);
+    expect(view.result.current.ended).toBe(true);
+  });
+
+  it('a newcomer taking over does not reset the allowance', async () => {
+    const view = await session({mode: 'airplay'});
+    act(() => view.result.current.startCast('airplay'));
+    await advance(29 * MIN);
+    view.rerender({mode: 'browser'});
+    act(() => view.result.current.startCast('browser'));
+    await advance(MIN - 1);
+    expect(onStop).not.toHaveBeenCalled();
+    await advance(1);
+    expect(onStop.mock.calls).toEqual([['browser']]);
+  });
+
+  it('a timer armed for the old cast that fires during a takeover does nothing', async () => {
+    const view = await session({mode: 'airplay'});
+    act(() => view.result.current.startCast('airplay'));
+    await advance(ALLOWANCE_MS - 1);
+    // A browser share takes over at the last millisecond, and the old timer fires before the next render.
     act(() => {
       view.result.current.startCast('browser');
       jest.advanceTimersByTime(1);
     });
     expect(onStop).not.toHaveBeenCalled();
-    expect(view.result.current.ended).toBe(false);
     view.rerender({mode: 'browser'});
-    advance(FREE_CAST_MS - 1);
-    expect(onStop).not.toHaveBeenCalled();
-    advance(1);
+    await advance(0);
+    // The newcomer starts with nothing left: stopped at once.
     expect(onStop.mock.calls).toEqual([['browser']]);
   });
 
-  it('keeps the end screen up and keeps stopping while the cast is still on', () => {
-    const view = session({mode: 'browser'});
+  it('a cast that starts with nothing left is stopped at once and shows the end screen', async () => {
+    stored.freeAllowance = JSON.stringify({weekStart: WEEK, usedMs: ALLOWANCE_MS});
+    const view = await session();
+    expect(view.result.current.remainingMs).toBe(0);
+    view.rerender({mode: 'browser'});
     act(() => view.result.current.startCast('browser'));
-    advance(FREE_CAST_MS);
+    await advance(0);
+    expect(onStop.mock.calls).toEqual([['browser']]);
+    expect(view.result.current.ended).toBe(true);
+  });
+
+  it('keeps the end screen up and keeps stopping while the cast is still on', async () => {
+    const view = await session({mode: 'browser'});
+    act(() => view.result.current.startCast('browser'));
+    await advance(ALLOWANCE_MS);
     expect(onStop).toHaveBeenCalledTimes(1);
-    // Back (or the idle wait) while the share hasn't stopped: the end screen stays.
     act(() => view.result.current.closeEnd());
     expect(view.result.current.ended).toBe(true);
-    advance(STOP_RETRY_MS);
+    await advance(STOP_RETRY_MS);
     expect(onStop.mock.calls).toEqual([['browser'], ['browser']]);
-    // The share stops: the close that was asked for lands, and nothing more is stopped.
     view.rerender({mode: 'idle'});
     expect(view.result.current.ended).toBe(false);
-    advance(STOP_RETRY_MS * 3);
+    await advance(STOP_RETRY_MS * 3);
     expect(onStop).toHaveBeenCalledTimes(2);
   });
 
-  it('once the cast is off, the end screen stays until closed', () => {
-    const view = session({mode: 'browser'});
+  it('once the cast is off, the end screen stays until closed', async () => {
+    const view = await session({mode: 'browser'});
     act(() => view.result.current.startCast('browser'));
-    advance(FREE_CAST_MS);
+    await advance(ALLOWANCE_MS);
     view.rerender({mode: 'idle'});
-    advance(STOP_RETRY_MS * 2);
+    await advance(STOP_RETRY_MS * 2);
     expect(view.result.current.ended).toBe(true);
     expect(onStop).toHaveBeenCalledTimes(1);
     act(() => view.result.current.closeEnd());
     expect(view.result.current.ended).toBe(false);
   });
 
-  it('unlocking on the end screen lets it close even before the cast is off', () => {
-    const view = session({mode: 'airplay'});
+  it('unlocking on the end screen lets it close even before the cast is off', async () => {
+    const view = await session({mode: 'airplay'});
     act(() => view.result.current.startCast('airplay'));
-    advance(FREE_CAST_MS);
+    await advance(ALLOWANCE_MS);
     view.rerender({mode: 'airplay', unlocked: true});
     act(() => view.result.current.closeEnd());
     expect(view.result.current.ended).toBe(false);
   });
 
-  it('AirPlay audio from standby is a cast of its own', () => {
-    const view = session();
-    view.rerender({audio: true});
-    advance(FREE_CAST_MS - 1);
+  it("AirPlay audio during a browser share isn't counted on top, and audio left playing at zero is stopped at once", async () => {
+    const view = await session({mode: 'browser'});
+    act(() => view.result.current.startCast('browser'));
+    await advance(5 * MIN);
+    view.rerender({mode: 'browser', audio: true});
+    await advance(15 * MIN);
+    // The share stops after 20 minutes; the music still playing becomes the cast.
+    view.rerender({mode: 'idle', audio: true});
+    expect(view.result.current.remainingMs).toBe(10 * MIN);
+    // Another share takes over at once and runs out the allowance.
+    view.rerender({mode: 'browser', audio: true});
+    act(() => view.result.current.startCast('browser'));
+    await advance(10 * MIN - 1);
     expect(onStop).not.toHaveBeenCalled();
-    advance(1);
+    await advance(1);
+    expect(onStop.mock.calls).toEqual([['browser']]);
+    // The share stops with the music still playing: the audio is the new cast, with nothing left.
+    view.rerender({mode: 'idle', audio: true});
+    await advance(0);
+    expect(onStop.mock.calls).toEqual([['browser'], ['audio']]);
+  });
+
+  it('AirPlay audio from standby counts too', async () => {
+    const view = await session();
+    view.rerender({audio: true});
+    await advance(ALLOWANCE_MS - 1);
+    expect(onStop).not.toHaveBeenCalled();
+    await advance(1);
     expect(onStop.mock.calls).toEqual([['audio']]);
   });
 
-  it("AirPlay audio during a browser share doesn't restart the share's 5 minutes, and isn't stopped with it", () => {
-    const view = session({mode: 'browser'});
-    act(() => view.result.current.startCast('browser'));
-    advance(120_000);
-    view.rerender({mode: 'browser', audio: true});
-    advance(FREE_CAST_MS - 120_000 - 1);
+  it('ready: false gives remainingMs null and never stops', async () => {
+    const view = await session({mode: 'airplay', ready: false});
+    act(() => view.result.current.startCast('airplay'));
+    expect(view.result.current.remainingMs).toBeNull();
+    await advance(ALLOWANCE_MS * 2);
     expect(onStop).not.toHaveBeenCalled();
-    advance(1);
-    // Only the share ran out.
-    expect(onStop.mock.calls).toEqual([['browser']]);
-    // The share stops; the music still playing is now the cast, with its own 5 minutes.
-    view.rerender({mode: 'idle', audio: true});
-    advance(FREE_CAST_MS - 1);
-    expect(onStop).toHaveBeenCalledTimes(1);
-    advance(1);
-    expect(onStop.mock.calls).toEqual([['browser'], ['audio']]);
+    expect(view.result.current.warningMs).toBeNull();
   });
 });
 
@@ -366,20 +502,21 @@ describe('end screen', () => {
     jest.spyOn(BackHandler, 'addEventListener');
   });
 
-  it('shows the end title with the plans', () => {
+  it('shows the end title and when more time comes, with the plans', () => {
     showEnd();
-    expect(screen.getByText('Free casts last 5 minutes')).toBeTruthy();
+    expect(screen.getByText("This week's free casting is used up")).toBeTruthy();
+    expect(screen.getByText('More free time on Monday at 05:00.')).toBeTruthy();
     expect(screen.getByText('Check purchases again')).toBeTruthy();
   });
 
-  it('end screen returns to standby after 60 s idle', () => {
+  it('end screen returns to standby after 60 s idle', async () => {
     showEnd();
-    advance(END_IDLE_MS - 10_000);
+    await advance(END_IDLE_MS - 10_000);
     pressKey();
     // A key press starts the 60 s again.
-    advance(END_IDLE_MS - 1);
+    await advance(END_IDLE_MS - 1);
     expect(onClose).not.toHaveBeenCalled();
-    advance(1);
+    await advance(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -391,12 +528,12 @@ describe('end screen', () => {
       fireEvent.press(screen.getByText('Check purchases again'));
     });
     expect(onCheckAgain).toHaveBeenCalledTimes(1);
-    advance(END_IDLE_MS * 3);
+    await advance(END_IDLE_MS * 3);
     expect(onClose).not.toHaveBeenCalled();
     await act(async () => answer());
-    advance(END_IDLE_MS - 1);
+    await advance(END_IDLE_MS - 1);
     expect(onClose).not.toHaveBeenCalled();
-    advance(1);
+    await advance(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

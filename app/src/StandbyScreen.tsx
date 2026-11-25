@@ -15,6 +15,7 @@ import type {StandbyInfo, Wallpaper} from './standby/data';
 import {StandbyLayout} from './standby/StandbyLayout';
 import {Credit, SCREEN, U, useDrift, useOffline} from './standby/parts';
 import {buildView} from './standby/view';
+import type {ConnectKind} from './standby/view';
 
 const BACKGROUND = require('./assets/standby-bg.png');
 
@@ -30,9 +31,20 @@ type Props = {
   shareCode?: string | null;
   /** Show the "Free version" hint by the Settings button. */
   freeVersion?: boolean;
+  /** This week's free time left, for the hint; null when not yet known. */
+  freeLeftMs?: number | null;
   onOpenSettings: () => void;
   /** The free-version hint opens the plans screen. */
   onOpenPlans?: () => void;
+  /** Paid TVs only: show the Windows button. */
+  showWindows?: boolean;
+  /** An Apple, Windows or Chrome button was pressed. */
+  onOpenConnect?: (kind: ConnectKind) => void;
+  /** Remove the button row and the free line while an overlay is open. */
+  hideButtons?: boolean;
+  /** The button whose overlay just closed takes the focus back. */
+  focusConnect?: ConnectKind | null;
+  onConnectFocused?: () => void;
   wallpaper?: Wallpaper | null;
 };
 
@@ -46,8 +58,14 @@ export const StandbyScreen = ({
   connectingSender,
   shareCode = null,
   freeVersion = false,
+  freeLeftMs = null,
   onOpenSettings,
   onOpenPlans,
+  showWindows = false,
+  onOpenConnect,
+  hideButtons = false,
+  focusConnect = null,
+  onConnectFocused,
   wallpaper = null,
 }: Props) => {
   const offline = useOffline(serverConnected);
@@ -106,12 +124,20 @@ export const StandbyScreen = ({
       ) : null}
       {onPhoto ? <View testID="standby-tint" style={styles.tint} /> : null}
       <View testID="standby-content" style={[styles.content, {transform: [{translateX: dx}, {translateY: dy}]}]}>
-        <StandbyLayout
-          view={view}
-          freeVersion={freeVersion}
-          onOpenSettings={onOpenSettings}
-          onOpenPlans={onOpenPlans}
-        />
+        {/* Behind a connect overlay the clock, card and buttons step aside: only the wallpaper shows through its glass. */}
+        {hideButtons ? null : (
+          <StandbyLayout
+            view={view}
+            freeVersion={freeVersion}
+            freeLeftMs={freeLeftMs}
+            onOpenSettings={onOpenSettings}
+            onOpenPlans={onOpenPlans}
+            showWindows={showWindows}
+            onOpenConnect={onOpenConnect}
+            focusConnect={focusConnect}
+            onConnectFocused={onConnectFocused}
+          />
+        )}
         <Credit text={credit} />
       </View>
     </View>

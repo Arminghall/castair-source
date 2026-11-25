@@ -67,9 +67,10 @@ it('Yearly drops the trial wording when Amazon has no trial, and takes initial f
   expect(node?.props.hasTVPreferredFocus).toBe(true);
 });
 
-it('shows a custom title', () => {
-  show({title: 'Free casts last 5 minutes'});
-  expect(screen.getByText('Free casts last 5 minutes')).toBeTruthy();
+it('shows a custom title, with a line under it', () => {
+  show({title: "This week's free casting is used up", subtitle: 'More free time on Monday at 05:00.'});
+  expect(screen.getByText("This week's free casting is used up")).toBeTruthy();
+  expect(screen.getByText('More free time on Monday at 05:00.')).toBeTruthy();
 });
 
 it('missing product hides its button', () => {

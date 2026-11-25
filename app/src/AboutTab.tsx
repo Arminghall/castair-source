@@ -86,6 +86,10 @@ export const AboutTab = () => (
       regions. IOS is a trademark or registered trademark of Cisco in the U.S. and other countries and is used under
       license. CastAir is not affiliated with or endorsed by Apple Inc.
     </Text>
+    <Text style={styles.small}>
+      Windows is a trademark of the Microsoft group of companies. Chrome and Google Cast are trademarks of Google LLC.
+      CastAir is not affiliated with or endorsed by either.
+    </Text>
   </ScrollView>
 );
 

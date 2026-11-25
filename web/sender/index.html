@@ -2,87 +2,161 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f3328" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#121214" />
+    <meta
+      name="description"
+      content="Share your laptop's screen to a CastAir TV from Chrome or Edge. Nothing to install." />
     <title>CastAir: put your screen on the TV</title>
     <link rel="icon" href="castair-icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="style.css" />
   </head>
-  <body>
-    <section class="hero">
-      <!-- The air: streams drawn like the lines in the CastAir icon, flowing into the panel. -->
-      <svg class="air" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <defs>
-          <radialGradient id="glow" cx="62%" cy="48%" r="45%">
-            <stop offset="0" stop-color="#2f7d60" stop-opacity="0.55" />
-            <stop offset="1" stop-color="#0f3328" stop-opacity="0" />
-          </radialGradient>
-        </defs>
-        <rect width="1440" height="900" fill="url(#glow)" />
-        <g fill="none" stroke-linecap="round">
-          <path class="s s1" d="M-80 210 C 260 170, 520 300, 760 360 S 1180 420, 1520 380" />
-          <path class="s s2" d="M-80 300 C 220 280, 480 360, 740 400 S 1160 450, 1520 470" />
-          <path class="s s3" d="M-80 400 C 240 400, 500 430, 760 440 S 1200 450, 1520 440" />
-          <path class="s s4" d="M-80 500 C 230 520, 500 480, 760 470 S 1180 470, 1520 520" />
-          <path class="s s5" d="M-80 610 C 260 640, 520 540, 760 500 S 1160 480, 1520 600" />
-          <path class="s s6" d="M-80 720 C 300 760, 560 600, 780 530 S 1200 520, 1520 700" />
-          <path class="s s7" d="M-80 120 C 320 80, 600 260, 800 330 S 1220 380, 1520 260" />
-        </g>
-      </svg>
+  <body class="standby cast">
+    <header class="bar">
+      <a class="brand shadowed" href="/"><img src="castair-icon.svg" alt="" width="32" height="32" />CastAir</a>
+      <nav class="nav" aria-label="CastAir">
+        <a href="/about">About</a>
+        <a href="/support">Help</a>
+      </nav>
+    </header>
 
-      <header class="bar">
-        <a class="brand" href="/"><img src="castair-icon.svg" alt="" width="32" height="32" />CastAir</a>
-      </header>
-
-      <main class="panel">
+    <div class="stage">
+      <div class="intro shadowed">
         <h1>Put your screen on&nbsp;the&nbsp;TV.</h1>
-        <p class="lede">
-          Pick a CastAir TV on your network and share your screen, a window or a tab. Nothing to install.
-        </p>
+        <p>Pick the TV, type the code it shows, and share your screen, a window or a tab. Nothing to install.</p>
+      </div>
+
+      <main class="panel glass" data-state="idle" aria-labelledby="panel-title">
+        <h2 id="panel-title" class="visually-hidden">Share to a TV</h2>
 
         <p id="unsupported" class="notice" hidden>
-          This browser can't share its screen. Open this page in Microsoft Edge or Google Chrome on a laptop.
+          This browser can't share a screen. On a laptop, open castair.app in Chrome or Edge. On an iPhone or iPad, use
+          Screen Mirroring in Control Centre.
         </p>
 
-        <h2 class="visually-hidden" id="tvs-heading">TVs on your network</h2>
-        <ul id="tvs" class="tvs" aria-labelledby="tvs-heading"></ul>
-        <p id="no-tvs" class="empty">Looking for TVs…</p>
+        <div class="panel-top" id="find-row">
+          <span id="found" class="pill quiet">Looking for TVs</span>
+        </div>
+
+        <ul id="tvs" class="tvs" aria-label="TVs on your Wi-Fi"></ul>
+        <p id="no-tvs" class="empty">Looking for CastAir TVs on your Wi-Fi…</p>
 
         <label id="code-box" class="code" hidden
-          >Code shown on the TV <input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off"
+          >Code<span class="visually-hidden"> shown on the TV</span>
+          <input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="0000"
         /></label>
+
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <p id="connection" class="connection" hidden></p>
 
         <div class="actions">
           <button id="share" class="primary" disabled>Share screen</button>
-          <button id="stop" class="secondary" hidden>Stop sharing</button>
-          <label class="sound"><input type="checkbox" id="audio" checked /><span>Include sound</span></label>
+          <button id="stop" class="primary" hidden>Stop sharing</button>
         </div>
-        <label class="name">Your name on the TV <input id="name" maxlength="40" autocomplete="off" /></label>
-        <p id="status" class="status" role="status" aria-live="polite"></p>
-      </main>
-    </section>
+        <p id="stop-hint" class="hint" hidden>You can also stop from your browser's sharing bar.</p>
 
-    <section class="how" aria-label="How it works">
-      <div class="steps">
-        <div>
-          <h3>Pick the TV</h3>
-          <p>Every CastAir TV on your network is listed by its name.</p>
-        </div>
-        <div>
-          <h3>Share</h3>
-          <p>Choose your whole screen, one window or a browser tab.</p>
-        </div>
-        <div>
-          <h3>Stop any time</h3>
-          <p>Use Stop sharing here, or the bar your browser shows.</p>
-        </div>
+        <details class="options" id="options">
+          <summary>Options <span class="summary-now" id="options-now"></span></summary>
+          <div class="options-body">
+            <fieldset class="quality">
+              <legend>Quality</legend>
+              <div class="segmented">
+                <label><input type="radio" name="quality" value="text" checked /><span>Sharp text</span></label>
+                <label><input type="radio" name="quality" value="video" /><span>Smooth video</span></label>
+              </div>
+              <p>Sharp text suits slides and documents. Smooth video suits anything that moves.</p>
+            </fieldset>
+            <label id="sound-box" class="sound"
+              ><span>Include sound</span><input type="checkbox" id="audio" checked
+            /></label>
+            <label id="name-box" class="name"
+              >Your name on the TV <input id="name" maxlength="40" autocomplete="off"
+            /></label>
+          </div>
+        </details>
+      </main>
+    </div>
+
+    <footer class="base">
+      <div class="left">
+        <ul class="rounds">
+          <li>
+            <button class="round" type="button" data-open="apple-help">
+              <span class="disc"
+                ><svg viewBox="0 0 256 256" aria-hidden="true">
+                  <g fill="currentColor" transform="translate(-39.24 -47.25) scale(0.32665)">
+                    <path d="M163 243H861V664H687L660 633H830V274H194V633H364L337 664H163Z" />
+                    <path d="M512 537L766 830H258Z" />
+                  </g></svg></span
+              >iPhone or Mac
+            </button>
+          </li>
+          <li>
+            <button class="round" type="button" data-open="find-help">
+              <span class="disc"
+                ><svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round">
+                  <circle cx="12" cy="12" r="9.5" />
+                  <path d="M9.4 9.3a2.7 2.7 0 0 1 5.2 1c0 1.8-2.6 2.3-2.6 3.9" />
+                  <circle cx="12" cy="17.4" r=".4" fill="currentColor" /></svg></span
+              >TV not listed?
+            </button>
+          </li>
+        </ul>
+        <p class="foot shadowed">
+          CastAir, <a href="https://arminghall.com">an Arminghall app</a> · <a href="/privacy">Privacy</a> ·
+          <a href="/source">Source</a>
+        </p>
       </div>
-      <p class="apple">On an iPhone, iPad or Mac, use Screen Mirroring in Control Center instead.</p>
-      <footer>
-        CastAir, <a href="https://arminghall.com">an Arminghall app</a> · <a href="/privacy">Privacy</a> ·
-        <a href="/support">Support</a> · <a href="/source">Source</a>
-      </footer>
-    </section>
+    </footer>
+
+    <dialog class="overlay" id="apple-help" aria-labelledby="apple-help-title">
+      <div class="overlay-head">
+        <img src="icons/airplay.svg" alt="" />
+        <h2 id="apple-help-title">Share from an iPhone, iPad or Mac</h2>
+      </div>
+      <ol class="steps">
+        <li>Join the same Wi-Fi as the TV.</li>
+        <li>Open <b>Control Centre</b> and choose <b>Screen Mirroring</b>.</li>
+        <li>Choose the TV. Its name is on the TV, starting with <b>CastAir</b>.</li>
+      </ol>
+      <p>No website needed. It works the same way as on any AirPlay TV.</p>
+      <form method="dialog"><button class="secondary close" autofocus>Close</button></form>
+    </dialog>
+
+    <dialog class="overlay" id="find-help" aria-labelledby="find-help-title">
+      <div class="overlay-head">
+        <img src="icons/cast.svg" alt="" />
+        <h2 id="find-help-title">Can't see your TV?</h2>
+      </div>
+      <ol class="steps">
+        <li>Check the TV is on and showing <b>CastAir is ready</b>.</li>
+        <li>Join the same Wi-Fi as the TV, and turn off any VPN.</li>
+        <li>Give it a few seconds. This page looks again by itself.</li>
+      </ol>
+      <p>
+        Still nothing? <a href="/support">Read the help page</a>, or email
+        <a href="mailto:castair@arminghall.com">castair@arminghall.com</a>.
+      </p>
+      <form method="dialog"><button class="secondary close" autofocus>Close</button></form>
+    </dialog>
+
+    <script type="module">
+      import {showWallpaper} from './wallpaper.js';
+      showWallpaper();
+      for (const button of document.querySelectorAll('[data-open]')) {
+        button.addEventListener('click', () => document.getElementById(button.dataset.open).showModal());
+      }
+      // A click on the dim around a dialog closes it.
+      for (const dialog of document.querySelectorAll('dialog')) {
+        dialog.addEventListener('click', (e) => e.target === dialog && dialog.close());
+      }
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

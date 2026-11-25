@@ -4,7 +4,15 @@
 //
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CastAirSender, isTerminalShareState, preferCodec} from '../sender/sender.js';
+import {
+  CastAirSender,
+  boostVideoBitrate,
+  captureConstraints,
+  isTerminalShareState,
+  preferCodec,
+  qualityName,
+} from '../sender/sender.js';
+import {formatConnection} from '../sender/connection.js';
 import {FakePeerConnection, FakeWebSocket, flushAsync, installFakes} from './fake-webrtc.js';
 
 function fakeTrack(kind) {
@@ -296,4 +304,285 @@ test("stopping tells the server, so the TV doesn't keep the last frame", async (
   const {sender, socket} = await startShare(t);
   sender.stopSharing('stopped');
   assert.deepEqual(socket.sent.at(-1), {type: 'bye'});
+});
+
+// Quality, start bitrate, reconnecting and the connection line.
+
+async function goLive(context) {
+  context.socket.receive({sdp: 'answer-sdp', sessionId: 'K7P2QX', type: 'answer'});
+  await flushAsync();
+  context.peerConnection.setConnectionState('connected');
+  await flushAsync();
+}
+
+test('sharp text is the default: detail, 15 fps, 8 Mbit/s, resolution kept', async (t) => {
+  const {peerConnection, video} = await startShare(t);
+
+  assert.equal(video.contentHint, 'detail');
+  assert.deepEqual(peerConnection.transceivers[0].sender.parameters, {
+    degradationPreference: 'maintain-resolution',
+    encodings: [{maxBitrate: 8_000_000, maxFramerate: 15}],
+  });
+});
+
+test('smooth video can be chosen mid-share without a new offer', async (t) => {
+  const context = await startShare(t);
+  const constraints = [];
+  context.video.applyConstraints = async (c) => constraints.push(c);
+
+  assert.equal(await context.sender.setQuality('video'), true);
+
+  assert.equal(context.video.contentHint, 'motion');
+  assert.deepEqual(context.peerConnection.transceivers[0].sender.parameters, {
+    degradationPreference: 'balanced',
+    encodings: [{maxBitrate: 12_000_000, maxFramerate: 30}],
+  });
+  // The size limit goes with it: applyConstraints replaces the whole set.
+  assert.deepEqual(constraints, [{frameRate: {ideal: 30, max: 30}, height: {max: 1080}, width: {max: 1920}}]);
+  assert.equal(FakePeerConnection.instances.length, 1);
+});
+
+test('a browser that refuses encoder settings still shares', async (t) => {
+  const context = await connectSender(t);
+  const media = fakeStream();
+  const original = FakePeerConnection.prototype.addTransceiver;
+  FakePeerConnection.prototype.addTransceiver = function (track, init) {
+    const transceiver = original.call(this, track, init);
+    transceiver.sender.setParameters = async () => {
+      throw new Error('InvalidModificationError');
+    };
+    return transceiver;
+  };
+  t.after(() => {
+    FakePeerConnection.prototype.addTransceiver = original;
+  });
+
+  await context.sender.share(media.stream, 'K7P2QX');
+
+  assert.equal(context.socket.sent.at(-1).type, 'offer');
+});
+
+test('capture is asked for at 1080p at most and the quality frame rate', () => {
+  assert.deepEqual(captureConstraints('text'), {
+    frameRate: {ideal: 15, max: 15},
+    height: {max: 1080},
+    width: {max: 1920},
+  });
+  assert.equal(captureConstraints('video').frameRate.max, 30);
+  assert.equal(qualityName('nonsense'), 'text');
+});
+
+const ANSWER_SDP = [
+  'v=0',
+  'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+  'a=fmtp:111 minptime=10;useinbandfec=1',
+  'm=video 9 UDP/TLS/RTP/SAVPF 102 103',
+  'a=rtpmap:102 H264/90000',
+  'a=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f',
+  'a=rtpmap:103 rtx/90000',
+  'a=fmtp:103 apt=102',
+  '',
+].join('\r\n');
+
+test('boostVideoBitrate raises the start bitrate on video codecs only', () => {
+  const tuned = boostVideoBitrate(ANSWER_SDP, {startKbps: 3000});
+  const extra = 'x-google-start-bitrate=3000;x-google-min-bitrate=800;x-google-max-bitrate=12000';
+
+  assert.equal(tuned, ANSWER_SDP.replace('profile-level-id=42e01f', `profile-level-id=42e01f;${extra}`));
+  // Running it twice changes nothing more, and no start bitrate leaves the SDP alone.
+  assert.equal(boostVideoBitrate(tuned, {startKbps: 3000}), tuned);
+  assert.equal(boostVideoBitrate(ANSWER_SDP), ANSWER_SDP);
+});
+
+test('only Chrome and Edge get the tuned answer', async (t) => {
+  const plain = await startShare(t);
+  plain.socket.receive({sdp: ANSWER_SDP, sessionId: 'K7P2QX', type: 'answer'});
+  await flushAsync();
+  assert.equal(plain.peerConnection.remoteDescription.sdp, ANSWER_SDP);
+
+  plain.sender.stopSharing();
+  plain.sender.tuneBitrate = true;
+  await plain.sender.share(fakeStream().stream, 'K7P2QX');
+  plain.socket.receive({sdp: ANSWER_SDP, sessionId: 'K7P2QX', type: 'answer'});
+  await flushAsync();
+  assert.match(FakePeerConnection.instances[1].remoteDescription.sdp, /x-google-start-bitrate=3000/);
+});
+
+test('a tuned answer the browser rejects falls back to the plain one', async (t) => {
+  const context = await startShare(t);
+  context.sender.tuneBitrate = true;
+  const set = context.peerConnection.setRemoteDescription.bind(context.peerConnection);
+  context.peerConnection.setRemoteDescription = async (description) => {
+    if (description.sdp.includes('x-google')) {
+      throw new Error('rejected');
+    }
+    return set(description);
+  };
+
+  context.socket.receive({sdp: ANSWER_SDP, sessionId: 'K7P2QX', type: 'answer'});
+  await flushAsync();
+
+  assert.equal(context.peerConnection.remoteDescription.sdp, ANSWER_SDP);
+  assert.equal(context.states.at(-1), 'connecting');
+});
+
+test('a live share that drops is offered again with the same stream', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout', 'setInterval']});
+  const context = await startShare(t);
+  await goLive(context);
+
+  context.peerConnection.setConnectionState('failed');
+  assert.equal(context.states.at(-1), 'reconnecting');
+  assert.equal(context.video.stopped, false);
+  assert.equal(context.peerConnection.closed, true);
+  // No "bye": that would tell the TV the share ended and change its code.
+  assert.equal(
+    context.socket.sent.some((m) => m.type === 'bye'),
+    false,
+  );
+
+  t.mock.timers.tick(1000);
+  await flushAsync();
+  const second = FakePeerConnection.instances[1];
+  assert.equal(second.transceivers[0].track, context.video);
+  assert.deepEqual(context.socket.sent.at(-1), {sdp: 'offer-sdp', sessionId: 'K7P2QX', type: 'offer'});
+
+  context.socket.receive({sdp: 'answer-sdp', sessionId: 'K7P2QX', type: 'answer'});
+  await flushAsync();
+  assert.equal(context.states.at(-1), 'reconnecting');
+  second.setConnectionState('connected');
+  assert.equal(context.states.at(-1), 'streaming');
+});
+
+test('a brief "disconnected" that heals does not reconnect', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout', 'setInterval']});
+  const context = await startShare(t);
+  await goLive(context);
+
+  context.peerConnection.setConnectionState('disconnected');
+  t.mock.timers.tick(3000);
+  context.peerConnection.setConnectionState('connected');
+  t.mock.timers.tick(10000);
+
+  assert.equal(FakePeerConnection.instances.length, 1);
+  assert.equal(context.states.at(-1), 'streaming');
+});
+
+test('"disconnected" for 5 s starts a reconnect', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout', 'setInterval']});
+  const context = await startShare(t);
+  await goLive(context);
+
+  context.peerConnection.setConnectionState('disconnected');
+  t.mock.timers.tick(5000);
+  assert.equal(context.states.at(-1), 'reconnecting');
+  t.mock.timers.tick(1000);
+  await flushAsync();
+
+  assert.equal(FakePeerConnection.instances.length, 2);
+});
+
+test('reconnecting gives up after its last wait and frees the capture', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout', 'setInterval']});
+  const context = await startShare(t);
+  await goLive(context);
+
+  context.peerConnection.setConnectionState('failed');
+  for (const wait of [1000, 3000, 6000, 10000, 15000, 20000]) {
+    t.mock.timers.tick(wait);
+    await flushAsync();
+    // Each new offer is refused: the TV isn't there.
+    context.socket.receive({reason: 'no-peer', sessionId: 'K7P2QX', type: 'error'});
+    await flushAsync();
+  }
+
+  assert.match(context.states.at(-1), /^failed: Lost the connection to the TV/);
+  assert.equal(context.video.stopped, true);
+  assert.equal(context.sender.isSharing, false);
+});
+
+test('reconnecting waits for the CastAir server to come back', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout', 'setInterval']});
+  const context = await startShare(t);
+  await goLive(context);
+
+  // The laptop slept: both the server connection and the share went.
+  context.socket.close();
+  context.peerConnection.setConnectionState('failed');
+  assert.equal(context.states.at(-1), 'reconnecting');
+  t.mock.timers.tick(1000);
+  await flushAsync();
+  assert.equal(FakePeerConnection.instances.length, 1);
+
+  // The server connection is back at 3 s; the next try, at 4 s, goes out on it.
+  t.mock.timers.tick(2000);
+  FakeWebSocket.instances[1].open();
+  t.mock.timers.tick(1000);
+  await flushAsync();
+
+  assert.equal(FakePeerConnection.instances.length, 2);
+  assert.equal(FakeWebSocket.instances[1].sent.at(-1).type, 'offer');
+});
+
+test("a reconnect the TV's new code blocks keeps the capture and asks for the code", async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout', 'setInterval']});
+  const context = await connectSender(t);
+  const media = fakeStream();
+  await context.sender.share(media.stream, 'K7P2QX', '4821');
+  const first = FakePeerConnection.instances[0];
+  await goLive({...context, peerConnection: first});
+
+  first.setConnectionState('failed');
+  t.mock.timers.tick(1000);
+  await flushAsync();
+  assert.equal(context.socket.sent.at(-1).code, '4821');
+  context.socket.receive({reason: 'bad-code', sessionId: 'K7P2QX', type: 'error'});
+  await flushAsync();
+
+  assert.match(context.states.at(-1), /^reconnect-code: The connection dropped and the TV has a new code/);
+  assert.equal(context.sender.isAwaitingCode, true);
+  assert.equal(media.video.stopped, false);
+  // It waits for the person: no more offers (each wrong code counts towards the lock).
+  const offers = context.socket.sent.filter((m) => m.type === 'offer').length;
+  t.mock.timers.tick(60000);
+  await flushAsync();
+  assert.equal(context.socket.sent.filter((m) => m.type === 'offer').length, offers);
+
+  await context.sender.resume('7310');
+  assert.equal(context.socket.sent.at(-1).code, '7310');
+  assert.equal(context.sender.isAwaitingCode, false);
+  assert.equal(FakePeerConnection.instances.at(-1).transceivers[0].track, media.video);
+});
+
+test('a share that never connected still ends instead of retrying', async (t) => {
+  const {peerConnection, states, video} = await startShare(t);
+
+  peerConnection.setConnectionState('failed');
+
+  assert.equal(states.at(-1), 'failed');
+  assert.equal(video.stopped, true);
+});
+
+test('stopping while reconnecting ends the share for good', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout', 'setInterval']});
+  const context = await startShare(t);
+  await goLive(context);
+
+  context.peerConnection.setConnectionState('failed');
+  context.sender.stopSharing('stopped');
+  t.mock.timers.tick(60000);
+  await flushAsync();
+
+  assert.equal(context.states.at(-1), 'stopped');
+  assert.equal(FakePeerConnection.instances.length, 1);
+  assert.equal(context.video.stopped, true);
+});
+
+test('the connection line shows size, frame rate and bitrate', () => {
+  assert.equal(
+    formatConnection({bitrateKbps: 6240, framesPerSecond: 14.6, height: 1080, width: 1920}),
+    '1920 × 1080 · 15 fps · 6.2 Mbit/s',
+  );
+  assert.equal(formatConnection({bitrateKbps: 640, framesPerSecond: null, height: null, width: null}), '640 kbit/s');
+  assert.equal(formatConnection(null), '');
 });

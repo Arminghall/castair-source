@@ -68,7 +68,7 @@ it('opens on the Settings tab with the TV name and current values', () => {
   expect(screen.getByText('°C (automatic)')).toBeTruthy();
   expect(screen.getByText('24-hour (automatic)')).toBeTruthy();
   expect(screen.getByText('Connected')).toBeTruthy();
-  expect(screen.getByText('castair.app/connect')).toBeTruthy();
+  expect(screen.getByText('castair.app')).toBeTruthy();
   fireEvent.press(screen.getByText('Name'));
   expect(props.onUseFireTvName).toHaveBeenCalledTimes(1);
 });
@@ -344,9 +344,17 @@ it('Back from Location returns to Settings; Back from Settings closes', () => {
 });
 
 describe('CastAir Unlimited row', () => {
+  it("free version shows this week's time left", () => {
+    const view = show({freeLeftMs: 24 * 60_000});
+    expect(screen.getByText('Free · 24 of 30 min left · resets Monday 05:00')).toBeTruthy();
+    view.rerender(<Settings {...props} freeLeftMs={0} />);
+    expect(screen.getByText('Free · none left · resets Monday 05:00')).toBeTruthy();
+    view.rerender(<Settings {...props} freeLeftMs={null} />);
+    expect(screen.getByText('Free version')).toBeTruthy();
+  });
   it('free version opens the plans screen, and Back returns to Settings', () => {
-    show();
-    expect(screen.getByText('Free version · 5-minute casts')).toBeTruthy();
+    show({freeLeftMs: 30 * 60_000});
+    expect(screen.getByText('Free · 30 of 30 min left · resets Monday 05:00')).toBeTruthy();
     fireEvent.press(screen.getByText('CastAir Unlimited'));
     expect(screen.getByText('Unlock CastAir')).toBeTruthy();
     pressBack();

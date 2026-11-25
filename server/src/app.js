@@ -3,7 +3,7 @@
 //
 // Copyright (C) 2026 Arminghall
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import {clientIp, isAllowed, routeStatic, serveStatic} from './http.js';
+import {clientIp, isAllowed, routeStatic, serveStatic, siteVersion} from './http.js';
 
 function sendJson(res, status, body) {
   res
@@ -16,6 +16,8 @@ function sendJson(res, status, body) {
  * createWallpaper; `pageRoot` and `sharedRoot` are web/sender and web/shared.
  */
 export function createHandler({allowedIps, standby, wallpaper, pageRoot, sharedRoot}) {
+  // Stamped on asset links so a deploy reaches browsers past Cloudflare's cache.
+  const version = siteVersion(pageRoot, sharedRoot);
   // GET /api/standby, /api/places and /api/wallpaper; false when the path isn't one of them.
   function handleApi(res, pathname, searchParams) {
     if (pathname === '/api/standby') {
@@ -82,8 +84,8 @@ export function createHandler({allowedIps, standby, wallpaper, pageRoot, sharedR
     const {pathname, searchParams} = url;
     if (req.method === 'GET' && handleApi(res, pathname, searchParams)) return;
     const done = pathname.startsWith('/shared/')
-      ? serveStatic(req, res, sharedRoot, '/shared')
-      : serveStatic(req, res, pageRoot, '', routeStatic(req.headers.host, pathname));
+      ? serveStatic(req, res, sharedRoot, '/shared', null, version)
+      : serveStatic(req, res, pageRoot, '', routeStatic(req.headers.host, pathname), version);
     done.catch((e) => {
       console.error(`static: ${e.message}`);
       if (!res.headersSent) {

@@ -7,6 +7,7 @@
  */
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
+import {settingsLabel} from './Allowance';
 import type {Prefs} from './Prefs';
 import {SHARE_ADDRESS} from './config';
 import {deviceCountry} from './standby/clock';
@@ -21,6 +22,8 @@ type Props = {
   info: StandbyInfo | null;
   serverConnected: boolean;
   unlockState: UnlockState;
+  /** This week's free time left; null when not yet known. */
+  freeLeftMs?: number | null;
   onPrefs: (patch: Partial<Prefs>) => void;
   onUseFireTvName: () => void;
   onOpenLocation: () => void;
@@ -40,6 +43,7 @@ export const SettingsTab = ({
   info,
   serverConnected,
   unlockState,
+  freeLeftMs = null,
   onPrefs,
   onUseFireTvName,
   onOpenLocation,
@@ -98,7 +102,12 @@ export const SettingsTab = ({
           {unlockState.unlocked ? (
             <Row label="CastAir Unlimited" value={`On · ${unlockState.kind ?? 'subscription'}`} />
           ) : (
-            <Row label="CastAir Unlimited" value="Free version · 5-minute casts" chevron onPress={onOpenPlans} />
+            <Row
+              label="CastAir Unlimited"
+              value={freeLeftMs === null ? 'Free version' : settingsLabel(freeLeftMs)}
+              chevron
+              onPress={onOpenPlans}
+            />
           )}
         </Group>
 

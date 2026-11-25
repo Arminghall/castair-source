@@ -77,7 +77,17 @@ export class FakePeerConnection {
   }
 
   addTransceiver(track, init) {
-    const transceiver = {init, track};
+    // A sender whose parameters tests can read back (transceiver.sender.parameters).
+    const sender = {
+      parameters: {encodings: [{}]},
+      getParameters() {
+        return structuredClone(this.parameters);
+      },
+      async setParameters(parameters) {
+        this.parameters = parameters;
+      },
+    };
+    const transceiver = {init, sender, track};
     this.transceivers.push(transceiver);
     return transceiver;
   }

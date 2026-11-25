@@ -4,7 +4,7 @@
  * Copyright (C) 2026 Arminghall
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import {receiverNameFor} from '../src/DeviceName';
+import {fireTvNameFor, receiverNameFor} from '../src/DeviceName';
 
 const MODEL = 'Fire TV Stick 4K Select';
 
@@ -44,4 +44,11 @@ it('keeps the name within 50 bytes so the RAOP record still fits', () => {
 it('replaces dots, which would split the mDNS name', () => {
   expect(receiverNameFor('D.S. Room', MODEL)).toBe('CastAir-D S Room');
   expect(receiverNameFor('...', MODEL)).toBe('CastAir');
+});
+
+it("gives the Fire TV's own name as people see it, or null when there is none", () => {
+  expect(fireTvNameFor('  Lounge ')).toBe('Lounge');
+  expect(fireTvNameFor('Mr. Smith')).toBe('Mr. Smith');
+  expect(fireTvNameFor('  ')).toBeNull();
+  expect(fireTvNameFor(null)).toBeNull();
 });

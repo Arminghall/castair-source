@@ -12,7 +12,7 @@ export const RECEIVER_NAME = 'CastAir';
 export const SOURCE_NOTE = 'castair.app/source (github.com/Arminghall/castair-source)';
 
 /** Where laptops go to share (the CastAir server, B8). */
-export const SHARE_ADDRESS = 'castair.app/connect';
+export const SHARE_ADDRESS = 'castair.app';
 
 /** Brand colours (docs/castair/brand/castair-icon.svg). */
 export const COLORS = {

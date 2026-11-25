@@ -1,6 +1,6 @@
 /*
  * The standby layout (one layout since B17). Left column: the time, date and weather at the top, left-aligned, and the
- * round Settings button at the bottom. Right: a card with the ready pill, the
+ * row of round buttons (Settings, Apple, Windows, Chrome) at the bottom, with the free-version line under it. Right: a card with the ready pill, the
  * TV's name and how to share.
  *
  * Copyright (C) 2026 Arminghall
@@ -8,11 +8,37 @@
  */
 import React from 'react';
 import {Image, Pressable, StyleSheet, Text, View} from 'react-native';
+import {leftLabel} from '../Allowance';
 import {COLORS} from '../config';
-import {ConnectLine, ICONS, MUTED, ReadyPill, SettingsButton, U, mutedOnPhoto, shadow} from './parts';
-import type {LayoutProps} from './view';
+import {
+  ConnectLine,
+  ICONS,
+  LOGOS,
+  MUTED,
+  ReadyPill,
+  RoundButton,
+  SettingsButton,
+  U,
+  mutedOnPhoto,
+  shadow,
+} from './parts';
+import type {ConnectKind, LayoutProps} from './view';
 
-export const StandbyLayout = ({view, freeVersion = false, onOpenSettings, onOpenPlans}: LayoutProps) => {
+export const StandbyLayout = ({
+  view,
+  freeVersion = false,
+  freeLeftMs = null,
+  onOpenSettings,
+  onOpenPlans,
+  showWindows = false,
+  onOpenConnect,
+  hideButtons = false,
+  focusConnect = null,
+  onConnectFocused,
+}: LayoutProps) => {
+  // The focus goes back to the button whose overlay just closed.
+  const focusProps = (kind: ConnectKind) =>
+    focusConnect === kind ? {preferred: true, onFocus: onConnectFocused} : {preferred: false};
   const sh = view.onPhoto && shadow;
   const mt = view.onPhoto && mutedOnPhoto;
   const {weather} = view;
@@ -46,20 +72,51 @@ export const StandbyLayout = ({view, freeVersion = false, onOpenSettings, onOpen
         </View>
 
         <View style={styles.bottom}>
-          {view.connectingSender ? null : (
-            <View style={styles.settingsRow}>
-              <SettingsButton onPress={onOpenSettings} onPhoto={view.onPhoto} />
+          {view.connectingSender || hideButtons ? null : (
+            <>
+              <View testID="standby-buttons" style={styles.buttonRow}>
+                <SettingsButton onPress={onOpenSettings} onPhoto={view.onPhoto} />
+                <RoundButton
+                  icon={LOGOS.apple}
+                  label="AirPlay"
+                  testID="connect-apple"
+                  onPress={() => onOpenConnect?.('apple')}
+                  {...focusProps('apple')}
+                  onPhoto={view.onPhoto}
+                  style={styles.buttonGap}
+                />
+                {showWindows ? (
+                  <RoundButton
+                    icon={LOGOS.windows}
+                    label="Windows"
+                    testID="connect-windows"
+                    onPress={() => onOpenConnect?.('windows')}
+                    {...focusProps('windows')}
+                    onPhoto={view.onPhoto}
+                    style={styles.buttonGap}
+                  />
+                ) : null}
+                <RoundButton
+                  icon={LOGOS.chrome}
+                  label="Cast"
+                  testID="connect-chrome"
+                  onPress={() => onOpenConnect?.('chrome')}
+                  {...focusProps('chrome')}
+                  onPhoto={view.onPhoto}
+                  style={styles.buttonGap}
+                />
+              </View>
               {freeVersion ? (
                 // A way into the plans screen (spec §5), like Settings › CastAir Unlimited.
                 <Pressable testID="standby-free-hint" onPress={onOpenPlans} style={styles.freeHintButton}>
                   {({focused}: {focused?: boolean}) => (
                     <Text style={[styles.freeHint, sh, mt, focused && styles.freeHintFocused]}>
-                      Free version · 5-minute casts
+                      {freeLeftMs === null ? 'Free version' : `Free version · ${leftLabel(freeLeftMs)}`}
                     </Text>
                   )}
                 </Pressable>
               ) : null}
-            </View>
+            </>
           )}
         </View>
       </View>
@@ -87,8 +144,9 @@ const styles = StyleSheet.create({
   wxText: {color: MUTED, fontSize: 1.6 * U},
   noTown: {maxWidth: 34 * U, marginTop: 1.4 * U},
   bottom: {alignItems: 'flex-start'},
-  settingsRow: {flexDirection: 'row', alignItems: 'center'},
-  freeHintButton: {marginLeft: 1.6 * U},
+  buttonRow: {flexDirection: 'row', alignItems: 'flex-start'},
+  buttonGap: {marginLeft: 2.2 * U},
+  freeHintButton: {marginTop: 1.4 * U},
   freeHint: {color: MUTED, fontSize: 1.4 * U},
   freeHintFocused: {color: COLORS.cream, fontWeight: '700', textDecorationLine: 'underline'},
   side: {flex: 1.05, alignSelf: 'center', marginRight: 3 * U},

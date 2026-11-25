@@ -2,72 +2,141 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f3328" />
     <meta name="description" content="Answers to common CastAir questions." />
-    <title>CastAir: Support</title>
+    <title>CastAir: Help</title>
     <link rel="icon" href="castair-icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="style.css" />
   </head>
-  <body class="doc">
+  <body class="settings-look">
     <header class="bar">
-      <a class="brand" href="/"><img src="castair-icon.svg" alt="" width="32" height="32" />CastAir</a>
+      <a class="brand" href="/about"><img src="castair-icon.svg" alt="" width="32" height="32" />CastAir</a>
+      <nav class="nav" aria-label="CastAir">
+        <a href="/">Share to a TV</a>
+        <a href="/support" aria-current="page">Help</a>
+      </nav>
     </header>
-    <main class="prose">
-      <h1>Support</h1>
-      <p>
-        Can't find your answer? Email <a href="mailto:castair@arminghall.com">castair@arminghall.com</a> and tell us
-        what you see.
+    <main class="doc">
+      <h1>Help</h1>
+      <p class="lede">
+        Quick answers to what people ask most. The TV shows the steps too: press a round button on its standby screen.
       </p>
 
-      <h2>Where do I find the share code?</h2>
-      <p>
-        When laptop sharing is on, the TV shows a 4-digit code next to its address, <b>castair.app/connect</b>. Type it
-        on the page when you pick the TV. The code changes every 10 minutes and after each share ends, so use the one on
-        screen now. If you type the wrong code several times, that TV makes your network wait a minute before you can
-        try again.
-      </p>
+      <div class="rows">
+        <details class="q">
+          <summary>How do I share from an iPhone, iPad or Mac?</summary>
+          <div class="a">
+            <p>
+              Join the same Wi-Fi as the TV. Open <b>Control Centre</b>, choose <b>Screen Mirroring</b>, then choose the
+              TV. Its name starts with <b>CastAir</b>. No website or app needed.
+            </p>
+          </div>
+        </details>
+        <details class="q">
+          <summary>How do I share from a laptop?</summary>
+          <div class="a">
+            <p>
+              Open <a href="/">castair.app</a> in Chrome or Edge, pick the TV, type the code it shows and choose
+              <b>Share screen</b>. You can share your whole screen, one window or a browser tab.
+            </p>
+          </div>
+        </details>
+        <details class="q">
+          <summary>Where do I find the share code?</summary>
+          <div class="a">
+            <p>
+              When laptop sharing is on, the TV shows a 4-digit code under its address, <b>castair.app</b>. The code
+              changes every 10 minutes and after each share ends, so use the one on screen now. If you type the wrong
+              code several times, that TV makes your network wait a minute before you can try again.
+            </p>
+          </div>
+        </details>
+        <details class="q">
+          <summary>The TV isn't listed, but we're on the same Wi-Fi</summary>
+          <div class="a">
+            <p>
+              Check the TV is on and shows <b>CastAir is ready</b>, and turn off any VPN on the laptop. The page looks
+              for TVs again every few seconds.
+            </p>
+            <p>
+              CastAir 1.0 doesn't support networks that mix IPv4 and IPv6, where the laptop and the TV reach the
+              internet in different ways and so don't see each other as being on one network. You can:
+            </p>
+            <ul>
+              <li>Use Screen Mirroring from an iPhone, iPad or Mac instead, which doesn't need the website; or</li>
+              <li>
+                Connect the laptop to the same network the TV uses, rather than a phone hotspot or Ethernet on a
+                different network.
+              </li>
+            </ul>
+          </div>
+        </details>
+        <details class="q">
+          <summary>Why did my cast stop?</summary>
+          <div class="a">
+            <p>
+              The free version gives you 30 minutes of casting every week. The TV warns you with 5 minutes and again
+              with 1 minute left, and the time refills on Monday at 05:00.
+            </p>
+            <p>
+              To cast without a limit, open Settings on the TV and choose <b>CastAir Unlimited</b>. There's a monthly or
+              yearly plan, or a one-off lifetime purchase. The app shows the prices.
+            </p>
+          </div>
+        </details>
+        <details class="q">
+          <summary>How do I share from Windows with Win+K?</summary>
+          <div class="a">
+            <p>
+              Windows sharing comes with CastAir Unlimited. On the TV, press the <b>Windows</b> button on the standby
+              screen, then <b>Enable Windows sharing</b>. On the laptop press Win+K and choose the Fire TV. Press Back
+              on the remote to return to CastAir.
+            </p>
+            <p>Any laptop can also share from <a href="/">castair.app</a> in Chrome or Edge.</p>
+          </div>
+        </details>
+        <details class="q">
+          <summary>I've bought Unlimited but the TV still says free</summary>
+          <div class="a">
+            <p>
+              On the TV, open Settings, then CastAir Unlimited, and choose <b>Check purchases again</b>. This is also
+              how a purchase made on another TV on the same Amazon account shows up.
+            </p>
+          </div>
+        </details>
+        <details class="q">
+          <summary>How do I cancel a subscription?</summary>
+          <div class="a">
+            <p>
+              Subscriptions are managed by Amazon. Cancel or change them in your Amazon account under Memberships &amp;
+              Subscriptions. They renew until cancelled.
+            </p>
+          </div>
+        </details>
+        <details class="q">
+          <summary>Which browsers can share a screen?</summary>
+          <div class="a">
+            <p>
+              Chrome and Edge on a laptop. Phones and tablets can't share from a browser; on an iPhone or iPad, use
+              Screen Mirroring in Control Centre.
+            </p>
+          </div>
+        </details>
+      </div>
 
-      <h2>Why did my cast stop after 5 minutes?</h2>
-      <p>
-        The free version of CastAir casts for 5 minutes at a time, with a warning at 4 minutes. Start another cast any
-        time, or unlock unlimited casts with a monthly or yearly plan, or a one-off lifetime purchase, in CastAir's
-        Settings on the TV, under CastAir Unlimited. The app shows the prices.
-      </p>
-
-      <h2>I've bought Unlimited but the TV still says free</h2>
-      <p>
-        On the TV, open Settings, then CastAir Unlimited, and choose <b>Check purchases again</b>. This is also how a
-        purchase made on another TV on the same Amazon account shows up.
-      </p>
-
-      <h2>How do I cancel a subscription?</h2>
-      <p>
-        Subscriptions are managed by Amazon. Cancel or change them in your Amazon account under Memberships &amp;
-        Subscriptions. They renew until cancelled.
-      </p>
-
-      <h2>The TV isn't listed on castair.app/connect, but we're on the same Wi-Fi</h2>
-      <p>
-        CastAir 1.0 doesn't support homes or offices that mix IPv4 and IPv6, where the laptop and the TV reach the
-        internet in different ways, so they don't see each other as being on one network. You can:
-      </p>
-      <ul>
-        <li>Use Screen Mirroring from an iPhone, iPad or Mac instead, which doesn't need the website; or</li>
-        <li>
-          Connect the laptop to the same network the TV uses: turn off a VPN, or use the TV's Wi-Fi rather than a phone
-          hotspot or Ethernet on a different network.
-        </li>
-      </ul>
-
-      <h2>Which browsers can share a screen?</h2>
-      <p>Chrome and Edge on a laptop. On an iPhone, iPad or Mac, use Screen Mirroring in Control Center.</p>
+      <div class="rows">
+        <div class="contact">
+          <p>Still stuck? Tell us what you see.</p>
+          <a class="primary" href="mailto:castair@arminghall.com">Email castair@arminghall.com</a>
+        </div>
+      </div>
     </main>
-    <section class="how">
-      <footer>
-        CastAir, <a href="https://arminghall.com">an Arminghall app</a> · <a href="/privacy">Privacy</a> ·
-        <a href="/support">Support</a> · <a href="/source">Source</a>
-      </footer>
-    </section>
+    <footer class="site-foot">
+      <div class="inner foot">
+        <span>CastAir, <a href="https://arminghall.com">an Arminghall app</a></span>
+        <span><a href="/about">About</a> · <a href="/privacy">Privacy</a> · <a href="/source">Source</a></span>
+      </div>
+    </footer>
   </body>
 </html>

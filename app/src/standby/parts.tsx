@@ -1,6 +1,6 @@
 /*
  * Standby parts used by the layout: the screen unit, colours, the weather
- * icons, the drift and offline hooks, and the pill, Settings, connect-line and
+ * icons, the drift and offline hooks, and the pill, round-button, connect-line and
  * photo-credit pieces.
  *
  * Copyright (C) 2026 Arminghall
@@ -10,7 +10,7 @@ import React, {useEffect, useState} from 'react';
 import {Dimensions, Image, Pressable, StyleSheet, Text, View} from 'react-native';
 import type {StyleProp, TextStyle, ViewStyle} from 'react-native';
 import {COLORS, SHARE_ADDRESS} from '../config';
-import type {StandbyView} from './view';
+import type {ConnectKind, StandbyView} from './view';
 import type {WeatherIcon} from './weatherSymbols';
 
 export const SCREEN = Dimensions.get('window');
@@ -92,17 +92,66 @@ export const ReadyPill = ({
         view.onPhoto && shadow,
         view.offline && view.onPhoto && mutedOnPhoto,
       ]}>
-      {view.offline ? 'AirPlay only, laptop sharing unavailable' : readyText}
+      {view.offline ? 'Screen Mirroring only, laptop sharing unavailable' : readyText}
     </Text>
   </View>
 );
 
 const GEAR = require('../assets/settings_gear.png');
+/** One-colour white 256 px marks, tinted like the gear. */
+export const LOGOS: Record<ConnectKind, number> = {
+  apple: require('../assets/logo_airplay.png'),
+  windows: require('../assets/logo_windows.png'),
+  chrome: require('../assets/logo_cast.png'),
+};
 
 /**
- * Settings: a round button with a gear and its name below. It turns cream
- * when the remote focuses it.
+ * A round button with a one-colour icon and its name below. It turns cream when the
+ * remote focuses it. The circle and icon get `<testID minus -button>-circle` / `-icon`.
+ * `preferred` makes it take the remote's focus when it appears.
  */
+export const RoundButton = ({
+  icon,
+  label,
+  testID,
+  onPress,
+  onPhoto,
+  style,
+  preferred = false,
+  onFocus,
+}: {
+  icon: number;
+  label: string;
+  testID: string;
+  onPress?: () => void;
+  onPhoto: boolean;
+  style?: StyleProp<ViewStyle>;
+  preferred?: boolean;
+  onFocus?: () => void;
+}) => {
+  const base = testID.replace(/-button$/, '');
+  return (
+    <Pressable testID={testID} onPress={onPress} onFocus={onFocus} hasTVPreferredFocus={preferred} style={style}>
+      {({focused}: {focused?: boolean}) => (
+        <View style={styles.settings}>
+          <View testID={`${base}-circle`} style={[styles.settingsCircle, focused && styles.settingsCircleFocused]}>
+            <Image
+              testID={`${base}-icon`}
+              source={icon}
+              resizeMode="contain"
+              style={[styles.settingsIcon, {tintColor: focused ? COLORS.greenDark : COLORS.cream}]}
+            />
+          </View>
+          <Text style={[styles.settingsText, onPhoto && [shadow, mutedOnPhoto], focused && styles.settingsTextFocused]}>
+            {label}
+          </Text>
+        </View>
+      )}
+    </Pressable>
+  );
+};
+
+/** Settings: the round button with the gear. */
 export const SettingsButton = ({
   onPress,
   onPhoto,
@@ -112,23 +161,14 @@ export const SettingsButton = ({
   onPhoto: boolean;
   style?: StyleProp<ViewStyle>;
 }) => (
-  <Pressable testID="settings-button" onPress={onPress} style={style}>
-    {({focused}: {focused?: boolean}) => (
-      <View style={styles.settings}>
-        <View testID="settings-circle" style={[styles.settingsCircle, focused && styles.settingsCircleFocused]}>
-          <Image
-            testID="settings-icon"
-            source={GEAR}
-            resizeMode="contain"
-            style={[styles.settingsIcon, {tintColor: focused ? COLORS.greenDark : COLORS.cream}]}
-          />
-        </View>
-        <Text style={[styles.settingsText, onPhoto && [shadow, mutedOnPhoto], focused && styles.settingsTextFocused]}>
-          Settings
-        </Text>
-      </View>
-    )}
-  </Pressable>
+  <RoundButton
+    icon={GEAR}
+    label="Settings"
+    testID="settings-button"
+    onPress={onPress}
+    onPhoto={onPhoto}
+    style={style}
+  />
 );
 
 /** How to share, in one line (B14). */

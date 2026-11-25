@@ -1,11 +1,16 @@
 /*
- * The 5-minute free cast (spec §6): on the free version every cast (AirPlay
- * mirroring, AirPlay audio-only or a browser share) is timed from when it
- * starts. At 4:00 a small banner shows for 15 s; at 5:00 App stops the cast
- * and shows the plans under "Free casts last 5 minutes", which return to
- * standby after 60 s with no key press. A newcomer taking over starts a new
- * 5 minutes, and unlocking stops the timer at once. Until the stopped cast is
- * really off, the stop is asked for again every 10 s and the end screen stays.
+ * The weekly free allowance (spec §3): on the free version, casting (AirPlay
+ * mirroring, AirPlay audio-only or a browser share) uses up 30 minutes a week,
+ * counted only while a cast is live. The week starts on Monday at 05:00, TV
+ * time (Allowance.ts holds the maths); a cast running through the reset
+ * carries on and counts against the new week. What's used is kept on the TV,
+ * saved every 15 s during a cast and when it ends. A 15 s banner shows when 5
+ * minutes are left and again at 1 minute; at zero App stops the cast and shows
+ * the plans under "This week's free casting is used up", which return to
+ * standby after 60 s with no key press. A newcomer taking over carries on with
+ * what's left, and a cast that starts with nothing left is stopped at once.
+ * Unlocking stops the count at once. Until the stopped cast is really off, the
+ * stop is asked for again every 10 s and the end screen stays.
  *
  * Copyright (C) 2026 Arminghall
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -13,16 +18,15 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {BackHandler, StyleSheet, Text, View} from 'react-native';
 import {useTVEventHandler} from '@amazon-devices/react-native-kepler';
+import {SAVE_EVERY_MS, WARN_AT_MS, currentState, remainingMs, spend, weekStart} from './Allowance';
+import type {AllowanceState} from './Allowance';
 import {COLORS} from './config';
 import {PlansScreen} from './PlansScreen';
 import {U} from './SettingsParts';
 import type {Mode} from './ShareMode';
+import {AsyncStorage} from './storage';
 
-/** A free cast ends at 5:00. */
-export const FREE_CAST_MS = 300_000;
-/** The banner shows at 4:00... */
-export const WARN_AT_MS = 240_000;
-/** ...for 15 s. */
+/** Each banner shows for 15 s. */
 export const BANNER_MS = 15_000;
 /**
  * When the TV turns out to be on the free version while a cast is already
@@ -35,6 +39,23 @@ export const END_IDLE_MS = 60_000;
 /** While an ended cast is still on, its stop is asked for again this often. */
 export const STOP_RETRY_MS = 10_000;
 
+/** One commit charges at most this long: a longer span means the clock jumped, not that the cast ran. */
+const MAX_SPAN_MS = 4 * SAVE_EVERY_MS;
+
+/** Where the allowance is kept: JSON of AllowanceState. */
+const STORAGE_KEY = 'freeAllowance';
+const WEEK_MS = 7 * 24 * 3_600_000;
+/** The last banner also shows at once for a cast with less than that left: no cast ends unwarned. */
+const LAST_WARNING_MS = WARN_AT_MS[WARN_AT_MS.length - 1];
+
+const parse = (text: string | null): unknown => {
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+};
+
 type Options = {
   /** Changes when a new cast starts or takes over. */
   castKey: number;
@@ -43,21 +64,75 @@ type Options = {
   unlocked: boolean;
   /** False until the unlocked state has loaded; nothing is timed before then. */
   ready?: boolean;
-  onWarn?: () => void;
-  /** At 5:00, with the castKey it was armed for; again every 10 s while the cast is still on. */
+  /** The TV's offset from UTC in minutes, for the Monday 05:00 reset. */
+  offsetMin: number;
+  /** As a banner shows, with the time left it announces. */
+  onWarn?: (leftMs: number) => void;
+  /** At zero, with the castKey it was armed for; again every 10 s while the cast is still on. */
   onEnd: (castKey: number) => void;
 };
 
-/** Times the current cast on the free version. `warning` is true while the 4:00 banner shows. */
-export function useFreeCast({castKey, active, unlocked, ready = true, onWarn, onEnd}: Options): {warning: boolean} {
-  const [warning, setWarning] = useState(false);
+/**
+ * Times casting on the free version against the weekly allowance.
+ * `warningMs` is the time a banner announces while it shows, else null.
+ * `remainingMs` is null when unlocked, before the unlocked state or the
+ * stored allowance has loaded.
+ */
+export function useFreeCast({castKey, active, unlocked, ready = true, offsetMin, onWarn, onEnd}: Options): {
+  warningMs: number | null;
+  remainingMs: number | null;
+} {
+  const [warningMs, setWarningMs] = useState<number | null>(null);
+  const [allowance, setAllowance] = useState<AllowanceState | null>(null);
   const callbacks = useRef({onWarn, onEnd});
   callbacks.current = {onWarn, onEnd};
+  const offset = useRef(offsetMin);
+  offset.current = offsetMin;
   const limited = ready && !unlocked;
+  // Read by the timers: one that fires after the render that unlocks the TV, before the cleanup, must do nothing.
+  const limitedNow = useRef(limited);
+  limitedNow.current = limited;
+  const loaded = allowance !== null;
+  const week = allowance?.weekStart ?? null;
+  // The allowance as of the last change, and since when the live cast has been counted but not yet spent.
+  const state = useRef<AllowanceState | null>(null);
+  const spanStart = useRef<number | null>(null);
   // When the current cast started, whether it has been ended, and since when the TV has been limited.
   const castStart = useRef(0);
   const ended = useRef(false);
   const limitedSince = useRef(0);
+
+  const update = useCallback((next: AllowanceState) => {
+    state.current = next;
+    setAllowance(next);
+  }, []);
+  /** Spends the live time so far. */
+  const commit = useCallback(() => {
+    const now = Date.now();
+    if (spanStart.current !== null && state.current) {
+      update(spend(state.current, Math.max(spanStart.current, now - MAX_SPAN_MS), now, offset.current));
+      spanStart.current = now;
+    }
+  }, [update]);
+  const save = useCallback(() => {
+    if (state.current) {
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state.current)).catch(() => undefined);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then(parse, () => null)
+      .then((stored) => {
+        if (!cancelled) {
+          update(currentState(stored, Date.now(), offset.current));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [update]);
 
   useEffect(() => {
     if (active) {
@@ -72,59 +147,120 @@ export function useFreeCast({castKey, active, unlocked, ready = true, onWarn, on
     }
   }, [limited]);
 
+  // A new week at Monday 05:00, cast or not: the standby line refills, and a running cast re-arms (below).
   useEffect(() => {
-    setWarning(false);
-    if (!active || !limited) {
+    if (!limited || !loaded) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      const now = Date.now();
+      const current = state.current;
+      if (current) {
+        const next = currentState(current, now, offsetMin);
+        if (next.weekStart !== current.weekStart || next.usedMs !== current.usedMs) {
+          update(next);
+        }
+      }
+      timer = setTimeout(refresh, weekStart(now, offsetMin) + WEEK_MS - now);
+    };
+    refresh();
+    return () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    };
+  }, [limited, loaded, offsetMin, update]);
+
+  useEffect(() => {
+    setWarningMs(null);
+    if (!active || !limited || week === null || !state.current) {
       return;
     }
     const armedFor = castKey;
+    const now = Date.now();
+    spanStart.current = now;
     let retry: ReturnType<typeof setInterval> | undefined;
-    const stop = () => callbacks.current.onEnd(armedFor);
+    let hide: ReturnType<typeof setTimeout> | undefined;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const stop = () => {
+      if (limitedNow.current) {
+        callbacks.current.onEnd(armedFor);
+      }
+    };
     const keepStopping = () => {
       retry = setInterval(stop, STOP_RETRY_MS);
     };
-    const stopRetrying = () => {
+    const saving = setInterval(() => {
+      commit();
+      save();
+    }, SAVE_EVERY_MS);
+    const disarm = () => {
+      clearInterval(saving);
       if (retry !== undefined) {
         clearInterval(retry);
       }
+      if (hide !== undefined) {
+        clearTimeout(hide);
+      }
+      timers.forEach(clearTimeout);
+      commit();
+      spanStart.current = null;
+      save();
     };
     if (ended.current) {
       keepStopping();
-      return stopRetrying;
+      return disarm;
     }
-    const now = Date.now();
-    // From the start of the cast, but never sooner than LOCKED_GRACE_MS after the limit applied.
-    const endAt = Math.max(castStart.current + FREE_CAST_MS, limitedSince.current + LOCKED_GRACE_MS);
-    const warnAt = endAt - (FREE_CAST_MS - WARN_AT_MS);
-    let hide: ReturnType<typeof setTimeout> | undefined;
-    const warn = setTimeout(
-      () => {
-        setWarning(true);
-        callbacks.current.onWarn?.();
-        hide = setTimeout(() => setWarning(false), BANNER_MS);
-      },
-      Math.max(0, warnAt - now),
+    // When what's left runs out, but for a cast already running when the limit
+    // applied, never sooner than LOCKED_GRACE_MS after that.
+    const graceUntil = castStart.current < limitedSince.current ? limitedSince.current + LOCKED_GRACE_MS : 0;
+    const endAt = Math.max(now + remainingMs(state.current), graceUntil);
+    for (const leftMs of WARN_AT_MS) {
+      const warnAt = endAt - leftMs;
+      if (warnAt < now && !(leftMs === LAST_WARNING_MS && endAt > now)) {
+        continue;
+      }
+      timers.push(
+        setTimeout(
+          () => {
+            if (!limitedNow.current) {
+              return;
+            }
+            if (hide !== undefined) {
+              clearTimeout(hide);
+            }
+            setWarningMs(leftMs);
+            callbacks.current.onWarn?.(leftMs);
+            hide = setTimeout(() => setWarningMs(null), BANNER_MS);
+          },
+          Math.max(0, warnAt - now),
+        ),
+      );
+    }
+    timers.push(
+      setTimeout(
+        () => {
+          if (!limitedNow.current) {
+            return;
+          }
+          ended.current = true;
+          if (hide !== undefined) {
+            clearTimeout(hide);
+          }
+          setWarningMs(null);
+          commit();
+          save();
+          stop();
+          keepStopping();
+        },
+        Math.max(0, endAt - now),
+      ),
     );
-    const end = setTimeout(() => {
-      ended.current = true;
-      if (hide !== undefined) {
-        clearTimeout(hide);
-      }
-      setWarning(false);
-      stop();
-      keepStopping();
-    }, endAt - now);
-    return () => {
-      clearTimeout(warn);
-      clearTimeout(end);
-      stopRetrying();
-      if (hide !== undefined) {
-        clearTimeout(hide);
-      }
-    };
-  }, [castKey, active, limited]);
+    return disarm;
+  }, [castKey, active, limited, week, commit, save]);
 
-  return {warning};
+  return {warningMs, remainingMs: limited && allowance ? remainingMs(allowance) : null};
 }
 
 /** The cast the free timer belongs to. */
@@ -137,28 +273,34 @@ type SessionOptions = {
   audio: boolean;
   unlocked: boolean;
   ready?: boolean;
-  onWarn?: () => void;
-  /** Stops a cast of `kind`: at 5:00, and again every 10 s while it's still on. */
+  /** The TV's offset from UTC in minutes, for the Monday 05:00 reset. */
+  offsetMin: number;
+  onWarn?: (leftMs: number) => void;
+  /** Stops a cast of `kind`: at zero, and again every 10 s while it's still on. */
   onStop: (kind: CastKind) => void;
 };
 
 /**
- * The free cast as App runs it. The timer belongs to the newest cast:
+ * The allowance as App runs it. The timer belongs to the newest cast:
  * AirPlay mirroring or a browser share (App calls startCast when one starts
  * or takes over), or AirPlay audio-only playing with nothing on screen.
- * Audio that starts during a share doesn't restart the share's 5 minutes;
- * audio still playing when the share stops becomes the cast, with its own.
- * At 5:00 only the cast that ran out is stopped, and the end screen stays up
- * until it's really off (`closeEnd` waits for that), unless the TV unlocks.
+ * Audio that starts during a share is counted as part of the share; audio
+ * still playing when the share stops becomes the cast. Every cast draws on
+ * the same weekly allowance. At zero only the cast that ran out is stopped,
+ * and the end screen stays up until it's really off (`closeEnd` waits for
+ * that), unless the TV unlocks.
  */
-export function useFreeCastSession({mode, audio, unlocked, ready = true, onWarn, onStop}: SessionOptions): {
-  warning: boolean;
-  /** True from 5:00 until the end screen closes. */
+export function useFreeCastSession({mode, audio, unlocked, ready = true, offsetMin, onWarn, onStop}: SessionOptions): {
+  /** The time a banner announces while it shows (5 or 1 minute), else null. */
+  warningMs: number | null;
+  /** True from zero until the end screen closes. */
   ended: boolean;
-  /** A cast started or took over: a new 5 minutes, and the end screen closes. */
+  /** A cast started or took over: it carries on with what's left, and the end screen closes. */
   startCast: (kind: CastKind) => void;
   /** Back, the Back row or the idle wait on the end screen. */
   closeEnd: () => void;
+  /** This week's free time left; null when unlocked or not yet known. */
+  remainingMs: number | null;
 } {
   // The ref moves at once, so a timer armed for the previous cast can tell it's stale before the next render.
   const castKey = useRef(0);
@@ -191,11 +333,12 @@ export function useFreeCastSession({mode, audio, unlocked, ready = true, onWarn,
     }
   }, [audio, mode, startCast]);
 
-  const {warning} = useFreeCast({
+  const {warningMs, remainingMs: left} = useFreeCast({
     castKey: cast.key,
     active,
     unlocked,
     ready,
+    offsetMin,
     onWarn,
     onEnd: (armedFor) => {
       if (armedFor !== castKey.current || castKind.current === null) {
@@ -221,23 +364,28 @@ export function useFreeCastSession({mode, audio, unlocked, ready = true, onWarn,
     }
   }, [enforcing]);
 
-  return {warning, ended, startCast, closeEnd};
+  return {warningMs, ended, startCast, closeEnd, remainingMs: left};
 }
 
-/** The 4:00 banner: a bottom corner of the cast, never in the remote's way. */
-export const FreeCastBanner = ({visible}: {visible: boolean}) =>
-  visible ? (
+/** The 5- and 1-minute banners: a bottom corner of the cast, never in the remote's way. */
+export const FreeCastBanner = ({leftMs}: {leftMs: number | null}) => {
+  if (leftMs === null) {
+    return null;
+  }
+  const minutes = Math.round(leftMs / 60_000);
+  return (
     <View pointerEvents="none" style={styles.banner}>
       <Text style={styles.bannerText}>
-        1 minute left on this free cast · Unlock unlimited casts in CastAir's Settings
+        {`${minutes} ${minutes === 1 ? 'minute' : 'minutes'} of free casting left this week`}
       </Text>
     </View>
-  ) : null;
+  );
+};
 
-type EndProps = Omit<React.ComponentProps<typeof PlansScreen>, 'title'>;
+type EndProps = Omit<React.ComponentProps<typeof PlansScreen>, 'title' | 'subtitle'>;
 
 /**
- * The plans under "Free casts last 5 minutes". Back, the Back row, or 60 s
+ * The plans under "This week's free casting is used up". Back, the Back row, or 60 s
  * with no key press close it; the 60 s wait pauses while Amazon is answering.
  */
 export const FreeCastEndScreen = ({products, productsLoaded, state, onBuy, onCheckAgain, onClose}: EndProps) => {
@@ -299,7 +447,8 @@ export const FreeCastEndScreen = ({products, productsLoaded, state, onBuy, onChe
       onBuy={(sku) => whileAnswering(() => onBuy(sku))}
       onCheckAgain={() => whileAnswering(onCheckAgain)}
       onClose={onClose}
-      title="Free casts last 5 minutes"
+      title="This week's free casting is used up"
+      subtitle="More free time on Monday at 05:00."
     />
   );
 };

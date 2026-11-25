@@ -6,13 +6,14 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Dimensions, StyleSheet, Text, View} from 'react-native';
+import {AppState, Dimensions, Linking, StyleSheet, Text, View} from 'react-native';
 import {KeplerVideoSurfaceView} from '@amazon-devices/react-native-w3cmedia';
 import {Receiver, ReceiverEvent, SegmentKind} from 'castair-native';
 import {CastAirSurface} from 'castair-surface';
 import {AvDelayOverlay} from './AvDelayOverlay';
 import {AvSync} from './AvSync';
 import {COLORS, RECEIVER_NAME} from './config';
+import {ConnectOverlay, MIRACAST_URI} from './ConnectOverlay';
 import {cachedReceiverName, loadReceiverName, saveReceiverName, watchReceiverName} from './DeviceName';
 import {ReceiverNaming} from './ReceiverNaming';
 import {BrowserShare, BrowserShareHandle} from './BrowserShare';
@@ -22,9 +23,10 @@ import type {Prefs} from './Prefs';
 import {Settings} from './Settings';
 import {useUnlock} from './useUnlock';
 import {StandbyScreen} from './StandbyScreen';
-import {deviceCountry} from './standby/clock';
+import {deviceCountry, offsetAt} from './standby/clock';
 import {useStandby} from './standby/useStandby';
 import {useWallpaper} from './standby/useWallpaper';
+import type {ConnectKind} from './standby/view';
 import {Mode, ShareEvent, next as nextMode} from './ShareMode';
 import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
@@ -72,6 +74,8 @@ export const App = () => {
   const [mirroring, setMirroring] = useState(false);
   const [sender, setSender] = useState<string | null>(null);
   const [receiverName, setReceiverName] = useState(RECEIVER_NAME);
+  // The Fire TV's own name (Win+K lists it), once read; null until then or when the privilege was denied.
+  const [fireTvName, setFireTvName] = useState<string | null>(null);
   const [audioOnly, setAudioOnly] = useState(false);
   const [videoSize, setVideoSize] = useState<[number, number]>([0, 0]);
   const player = useRef<MirrorPlayer | null>(null);
@@ -94,6 +98,10 @@ export const App = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [serverConnected, setServerConnected] = useState(false);
   const [shareCode, setShareCode] = useState<string | null>(null);
+  // The "how to connect" overlay open over the standby screen, if any.
+  const [connect, setConnect] = useState<ConnectKind | null>(null);
+  // The button whose overlay just closed, until it has the focus back.
+  const [focusConnect, setFocusConnect] = useState<ConnectKind | null>(null);
   const country = useMemo(() => deviceCountry(), []);
   const audio = useRef<MirrorPlayer | null>(null);
   const audioCt = useRef(0);
@@ -111,17 +119,23 @@ export const App = () => {
   const standbyActive = mode === 'idle' && !mirroring && !audioOnly;
   const {info: standbyInfo, nowMs} = useStandby(prefs, refreshKey, standbyActive);
   const wallpaper = useWallpaper(prefs, standbyActive);
-  // The 5-minute free cast (FreeCast.tsx). At 5:00 on the free version: stop
-  // the cast that ran out the usual way, and show the end screen.
+  // The weekly free allowance (FreeCast.tsx), reset on Monday at 05:00 by the
+  // standby clock's time. At zero on the free version: stop the cast that ran
+  // out the usual way, and show the end screen.
   const audioCast = audioOnly && sender !== null;
+  const offsetMin = standbyInfo?.time ? offsetAt(nowMs, standbyInfo.time) : -new Date().getTimezoneOffset();
   const freeCast = useFreeCastSession({
     mode,
     audio: audioCast,
     unlocked: unlock.state.unlocked,
     ready: unlock.ready,
-    onWarn: () => log('free cast: 1 minute left'),
+    offsetMin,
+    onWarn: (leftMs) => {
+      const minutes = leftMs / 60_000;
+      log(`free cast: ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} left`);
+    },
     onStop: (kind) => {
-      log(`free cast: 5 minutes, stopping the ${kind} cast`);
+      log(`free cast: allowance used up, stopping the ${kind} cast`);
       if (kind === 'browser') {
         browser.current?.endShare();
       } else {
@@ -135,10 +149,19 @@ export const App = () => {
     const {mode: m, actions} = nextMode(modeRef.current, event);
     modeRef.current = m;
     setMode(m);
+    if (event === 'airplayStarted' || event === 'browserStarted') {
+      // A cast starting ends any "how to connect" overlay; standby starts on Settings afterwards.
+      setConnect(null);
+      setFocusConnect(null);
+    }
     if (event === 'airplayStarted') {
       freeCast.startCast('airplay');
     } else if (event === 'browserStarted') {
       freeCast.startCast('browser');
+      // A share with sound takes audio focus from the keep-awake loop (KeepAwake.ts).
+      keepAwake.current.yieldToShare(true);
+    } else if (event === 'browserEnded') {
+      keepAwake.current.yieldToShare(false);
     }
     for (const action of actions) {
       log(`${event}: ${action}`);
@@ -306,7 +329,12 @@ export const App = () => {
       if (nameRetry) {
         clearTimeout(nameRetry);
       }
-      loadReceiverName(log, {force}).then((name) => {
+      const onFireTvName = (n: string | null) => {
+        if (!closed) {
+          setFireTvName(n);
+        }
+      };
+      loadReceiverName(log, {force, onFireTvName}).then((name) => {
         if (closed) {
           return;
         }
@@ -321,7 +349,12 @@ export const App = () => {
     loadName();
     useFireTvName.current = () => loadName(true);
     let unwatch: () => void = () => undefined;
-    watchReceiverName(named, log).then((u) => {
+    watchReceiverName((name, fireTv) => {
+      named(name);
+      if (!closed) {
+        setFireTvName(fireTv);
+      }
+    }, log).then((u) => {
       if (closed) {
         u();
       } else {
@@ -419,6 +452,31 @@ export const App = () => {
     keepAwake.current.set(sender === null);
   }, [sender]);
 
+  // The overlay closes as a sender connects, and the Windows one when the TV stops being paid.
+  const windowsAllowed = unlock.ready && unlock.state.unlocked;
+  useEffect(() => {
+    if (sender !== null) {
+      setConnect(null);
+      setFocusConnect(null);
+    }
+  }, [sender]);
+  useEffect(() => {
+    if (!windowsAllowed) {
+      setConnect((c) => (c === 'windows' ? null : c));
+    }
+  }, [windowsAllowed]);
+
+  // Back on screen (after the screensaver, say): start the loop again if the
+  // TV stopped it while CastAir was away.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'background') {
+        keepAwake.current.resume();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // The browser-share WebView stays mounted over every screen (B6): same
   // parent and position, so React keeps it across screen changes.
   const withBrowser = (screen: React.ReactElement) => (
@@ -435,7 +493,7 @@ export const App = () => {
         onServerConnection={setServerConnected}
         log={log}
       />
-      <FreeCastBanner visible={freeCast.warning} />
+      <FreeCastBanner leftMs={freeCast.warningMs} />
     </View>
   );
 
@@ -501,6 +559,7 @@ export const App = () => {
         info={standbyInfo}
         serverConnected={serverConnected}
         unlockState={unlock.state}
+        freeLeftMs={freeCast.remainingMs}
         products={unlock.products}
         productsLoaded={unlock.productsLoaded}
         onBuy={unlock.buy}
@@ -516,27 +575,53 @@ export const App = () => {
     );
   }
 
+  const freeVersion = unlock.ready && !unlock.state.unlocked;
+  const openSettings = (tab: 'settings' | 'plans') => {
+    setConnect(null);
+    setFocusConnect(null);
+    setSettingsTab(tab);
+    setShowSettings(true);
+  };
+  // Always inside the same View, so opening an overlay doesn't remount the standby screen.
   return withBrowser(
-    <StandbyScreen
-      name={receiverName}
-      info={standbyInfo}
-      prefs={prefs}
-      nowMs={nowMs}
-      country={country}
-      serverConnected={serverConnected}
-      connectingSender={sender}
-      shareCode={shareCode}
-      freeVersion={unlock.ready && !unlock.state.unlocked}
-      onOpenSettings={() => {
-        setSettingsTab('settings');
-        setShowSettings(true);
-      }}
-      onOpenPlans={() => {
-        setSettingsTab('plans');
-        setShowSettings(true);
-      }}
-      wallpaper={wallpaper}
-    />,
+    <View style={styles.fillFlex}>
+      <StandbyScreen
+        name={receiverName}
+        info={standbyInfo}
+        prefs={prefs}
+        nowMs={nowMs}
+        country={country}
+        serverConnected={serverConnected}
+        connectingSender={sender}
+        shareCode={shareCode}
+        freeVersion={freeVersion}
+        freeLeftMs={freeVersion ? freeCast.remainingMs : null}
+        onOpenSettings={() => openSettings('settings')}
+        onOpenPlans={() => openSettings('plans')}
+        showWindows={windowsAllowed}
+        onOpenConnect={(kind) => {
+          setFocusConnect(null);
+          setConnect(kind);
+        }}
+        hideButtons={connect !== null}
+        focusConnect={focusConnect}
+        onConnectFocused={() => setFocusConnect(null)}
+        wallpaper={wallpaper}
+      />
+      {connect !== null ? (
+        <ConnectOverlay
+          kind={connect}
+          castAirName={receiverName}
+          fireTvName={fireTvName}
+          shareCode={prefs.shareCodeOn ? shareCode : null}
+          onClose={() => {
+            setFocusConnect(connect);
+            setConnect(null);
+          }}
+          onEnableWindows={async () => Linking.openURL(MIRACAST_URI)}
+        />
+      ) : null}
+    </View>,
   );
 };
 
@@ -545,6 +630,7 @@ const styles = StyleSheet.create({
   video: {position: 'absolute'},
   fill: {position: 'absolute', left: 0, top: 0, width: SCREEN.width, height: SCREEN.height},
   app: {flex: 1, backgroundColor: '#000'},
+  fillFlex: {flex: 1},
   idle: {flex: 1, backgroundColor: COLORS.greenDark, alignItems: 'center'},
   line: {color: COLORS.muted, fontSize: 2 * U},
   name: {color: COLORS.cream, fontSize: 4.2 * U, fontWeight: 'bold', marginTop: 0.4 * U},

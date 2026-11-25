@@ -1,7 +1,7 @@
 /*
  * The plans screen: Yearly, Monthly and Lifetime, bought with the remote
  * (B18). Prices and the free trial come from Amazon's product data. Reached
- * from Settings, and from the end of a free cast (Task 10, with its own title).
+ * from Settings, and from the end of the free allowance (with its own title and a line under it).
  *
  * Copyright (C) 2026 Arminghall
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -27,6 +27,8 @@ type Props = {
   onCheckAgain: () => Promise<boolean>;
   onClose: () => void;
   title?: string;
+  /** A line under the title (not with the thanks). */
+  subtitle?: string;
 };
 
 type Plan = {sku: string; label: string};
@@ -61,6 +63,7 @@ export const PlansScreen = ({
   onCheckAgain,
   onClose,
   title = 'Unlock CastAir',
+  subtitle,
 }: Props) => {
   const [busy, setBusy] = useState(false);
   // Amazon answered a purchase or a check: thanks if the saved state now says unlocked.
@@ -114,7 +117,10 @@ export const PlansScreen = ({
     <View style={styles.root}>
       <Image source={BACKGROUND} resizeMode="stretch" style={styles.background} />
       <View style={styles.page}>
-        <Text style={styles.title}>{thanks ? 'Unlimited casts are on. Thank you!' : title}</Text>
+        <Text style={[styles.title, subtitle && !thanks ? styles.titleOverSubtitle : null]}>
+          {thanks ? 'Unlimited casts are on. Thank you!' : title}
+        </Text>
+        {subtitle && !thanks ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         {thanks ? (
           <Group>
             <Row label="Back" chevron preferred onPress={onClose} />
@@ -144,5 +150,7 @@ const styles = StyleSheet.create({
   background: {position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: '100%', height: '100%'},
   page: {flex: 1, paddingHorizontal: 12 * U, paddingTop: 6 * U, paddingBottom: 3 * U},
   title: {color: COLORS.cream, fontSize: 3 * U, fontWeight: '600', marginBottom: 2.4 * U},
+  titleOverSubtitle: {marginBottom: 0.8 * U},
+  subtitle: {color: MUTED, fontSize: 1.6 * U, marginBottom: 2.4 * U},
   status: {color: MUTED, fontSize: 1.4 * U, marginBottom: 1.2 * U},
 });

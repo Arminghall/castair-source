@@ -3,6 +3,8 @@
 //
 // Copyright (C) 2026 Arminghall
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import {createHash} from 'node:crypto';
+import {readdirSync, readFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {BlockList, isIP} from 'node:net';
 import {extname, join, normalize, sep} from 'node:path';
@@ -86,25 +88,62 @@ const TYPES = {
 const PAGES = new Set(['/privacy', '/support', '/source']);
 
 /**
- * The page file for a host and path, or null when the path is an ordinary static file.
- * Only castair.app shows the landing page at "/"; every other host shows the sharing page,
- * and "/connect" is the sharing page everywhere. `host` is the Host header (port allowed).
+ * The page file for a path, or null when the path is an ordinary static file.
+ * "/" is the casting page (index.html) on every host, and "/connect" still is too, so TVs on
+ * older builds keep working. "/about" (with or without a trailing slash) is the marketing page.
+ * `host` is the Host header; it no longer decides the page and is kept for the signature.
  */
 export function routeStatic(host, pathname) {
-  const name = String(host || '')
-    .toLowerCase()
-    .replace(/:\d+$/, '');
-  if (pathname === '/') return name === 'castair.app' ? 'home.html' : 'index.html';
-  if (pathname === '/connect') return 'index.html';
+  if (pathname === '/' || pathname === '/connect') return 'index.html';
+  if (pathname === '/about' || pathname === '/about/') return 'home.html';
   if (PAGES.has(pathname)) return `${pathname.slice(1)}.html`;
   return null;
 }
 
 /**
+ * One version for the whole site: a short hash of every file under `roots`.
+ * Worked out once at start-up, so each deploy that changes any file changes it.
+ */
+export function siteVersion(...roots) {
+  const hash = createHash('sha256');
+  for (const root of roots) {
+    let names;
+    try {
+      names = readdirSync(root, {recursive: true}).sort();
+    } catch {
+      continue; // No such folder: nothing to serve from it.
+    }
+    for (const name of names) {
+      try {
+        const body = readFileSync(join(root, name));
+        hash.update(`${name}\0`).update(body);
+      } catch {
+        // A folder: its files are listed on their own.
+      }
+    }
+  }
+  return hash.digest('hex').slice(0, 10);
+}
+
+// Relative links to the site's own CSS, JS and SVG files, and relative module imports.
+const ASSET_LINK = /\b(href|src)="(?![a-z][a-z0-9+.-]*:|\/|#)([^"?#]+\.(?:css|js|svg))"/g;
+const MODULE_IMPORT = /\bfrom '(\.{1,2}\/[^'?]+\.js)'/g;
+
+/**
+ * Adds `?v=<version>` to every asset link and module import in `text`.
+ * Cloudflare keeps CSS and JS in browsers for hours whatever this server says,
+ * so a new URL per deploy is the only way visitors get the new files.
+ */
+export function versionAssets(text, version) {
+  return text.replace(ASSET_LINK, `$1="$2?v=${version}"`).replace(MODULE_IMPORT, `from '$1?v=${version}'`);
+}
+
+/**
  * Serves files under `root` (after removing `prefix`), with "/" as index.html; 404 for anything else.
  * `page` names a file under `root` to serve instead of the path (from routeStatic).
+ * With a `version`, asset links in pages and scripts carry it (see versionAssets).
  */
-export async function serveStatic(req, res, root, prefix = '', page = null) {
+export async function serveStatic(req, res, root, prefix = '', page = null, version = null) {
   let path;
   try {
     path = decodeURIComponent(new URL(req.url, 'http://x').pathname).slice(prefix.length) || '/';
@@ -118,7 +157,10 @@ export async function serveStatic(req, res, root, prefix = '', page = null) {
     return;
   }
   try {
-    const body = await readFile(file);
+    let body = await readFile(file);
+    if (version && (extname(file) === '.html' || extname(file) === '.js')) {
+      body = versionAssets(body.toString('utf8'), version);
+    }
     res.writeHead(200, {
       'Content-Type': TYPES[extname(file)] || 'application/octet-stream',
       'Cache-Control': 'no-cache',

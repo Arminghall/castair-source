@@ -125,14 +125,21 @@ export async function readFriendlyName(
   }
 }
 
+/** The Fire TV's own name as people see it (Win+K lists it), or null when there's none to show. */
+export function fireTvNameFor(friendly: string | null): string | null {
+  const name = (friendly ?? '').trim();
+  return name || null;
+}
+
 /**
  * The name this TV should advertise now, or null when the Fire TV's name
  * couldn't be read (a slow or failed lookup): the caller keeps its current
  * name and tries again, rather than falling back to plain CastAir.
+ * `onFireTvName` gets the Fire TV's own name (fireTvNameFor) whenever it was read.
  */
 export async function loadReceiverName(
   log: (msg: string) => void,
-  opts: {force?: boolean} = {},
+  {onFireTvName, ...opts}: {force?: boolean; onFireTvName?: (name: string | null) => void} = {},
 ): Promise<string | null> {
   let model: string | null = null;
   try {
@@ -145,12 +152,16 @@ export async function loadReceiverName(
     return null;
   }
   log(`fire tv name ${JSON.stringify(friendly)}, model ${JSON.stringify(model)}`);
+  onFireTvName?.(fireTvNameFor(friendly));
   return receiverNameFor(friendly, model);
 }
 
-/** Calls `onChange` with the new receiver name when the Fire TV is renamed. Returns an unsubscribe. */
+/**
+ * Calls `onChange` with the new receiver name, and the Fire TV's own name
+ * (fireTvNameFor), when the Fire TV is renamed. Returns an unsubscribe.
+ */
 export async function watchReceiverName(
-  onChange: (name: string) => void,
+  onChange: (name: string, fireTvName: string | null) => void,
   log: (msg: string) => void,
 ): Promise<() => void> {
   try {
@@ -162,7 +173,7 @@ export async function watchReceiverName(
         } catch {
           model = null;
         }
-        onChange(receiverNameFor(n, model));
+        onChange(receiverNameFor(n, model), fireTvNameFor(n));
       },
     });
     return () => sub.unsubscribe();

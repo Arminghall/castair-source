@@ -43,7 +43,7 @@ it('shows time, date, name and CastAir is ready', () => {
   expect(screen.getByText('CastAir is ready')).toBeTruthy();
   expect(screen.getByText('Settings')).toBeTruthy();
   expect(screen.getByText(/Screen Mirroring/)).toBeTruthy();
-  expect(screen.getByText(/castair\.app\/connect/)).toBeTruthy();
+  expect(screen.getByText(/castair\.app/)).toBeTruthy();
 });
 
 it('shows weather with the town', () => {
@@ -91,12 +91,12 @@ it('falls back to the device clock when the server sent no time', () => {
   expect(screen.getByText('CastAir is ready')).toBeTruthy();
 });
 
-it('pill waits 60 s before showing AirPlay only', () => {
+it('pill waits 60 s before showing Screen Mirroring only', () => {
   const view = show({serverConnected: false});
   act(() => jest.advanceTimersByTime(59_000));
   expect(screen.getByText('CastAir is ready')).toBeTruthy();
   act(() => jest.advanceTimersByTime(1_000));
-  expect(screen.getByText('AirPlay only, laptop sharing unavailable')).toBeTruthy();
+  expect(screen.getByText('Screen Mirroring only, laptop sharing unavailable')).toBeTruthy();
   expect(screen.queryByText('CastAir is ready')).toBeNull();
   view.rerender(<StandbyScreen {...base} serverConnected />);
   expect(screen.getByText('CastAir is ready')).toBeTruthy();
@@ -294,4 +294,17 @@ it('a long photographer name is credited in full, never cut short', () => {
   fireEvent(screen.getByTestId('standby-photo'), 'load');
   const credit = screen.getByText(`Photo by ${photographer} on Unsplash`);
   expect(credit.props.numberOfLines).toBeUndefined();
+});
+
+it('passes the connect buttons through: Windows on a paid TV, the press, and hideButtons', () => {
+  const onOpenConnect = jest.fn();
+  const view = show({showWindows: true, onOpenConnect});
+  fireEvent.press(screen.getByTestId('connect-windows'));
+  expect(onOpenConnect).toHaveBeenCalledWith('windows');
+  view.rerender(<StandbyScreen {...base} showWindows onOpenConnect={onOpenConnect} hideButtons />);
+  expect(screen.queryByTestId('settings-button')).toBeNull();
+  expect(screen.queryByTestId('connect-apple')).toBeNull();
+  // The clock and the ready card step aside too, so nothing shows through the overlay's glass.
+  expect(screen.queryByTestId('standby-clock')).toBeNull();
+  expect(screen.queryByTestId('standby-layout')).toBeNull();
 });

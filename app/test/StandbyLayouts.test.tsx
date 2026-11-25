@@ -50,7 +50,7 @@ describe('ready card', () => {
     expect(screen.getByTestId('standby-layout')).toBeTruthy();
     expect(screen.getByText('CastAir is ready')).toBeTruthy();
     expect(screen.getByText('CastAir-Front Room')).toBeTruthy();
-    expect(screen.getByText('Use Screen Mirroring or castair.app/connect')).toBeTruthy();
+    expect(screen.getByText('Use Screen Mirroring or castair.app')).toBeTruthy();
     expect(screen.getByText('14:32')).toBeTruthy();
     expect(screen.getByText('Friday 20 November')).toBeTruthy();
     expect(screen.getByText('7°')).toBeTruthy();
@@ -59,12 +59,12 @@ describe('ready card', () => {
   it('offline: the pill is the offline wording', () => {
     show({serverConnected: false});
     act(() => jest.advanceTimersByTime(61_000));
-    expect(screen.getByText('AirPlay only, laptop sharing unavailable')).toBeTruthy();
+    expect(screen.getByText('Screen Mirroring only, laptop sharing unavailable')).toBeTruthy();
     expect(screen.queryByText('CastAir is ready')).toBeNull();
   });
   it('shows the code under the connect line', () => {
     show({shareCode: '4821'});
-    expect(screen.getByText('Use Screen Mirroring or castair.app/connect')).toBeTruthy();
+    expect(screen.getByText('Use Screen Mirroring or castair.app')).toBeTruthy();
     expect(screen.getByText('Code 4821')).toBeTruthy();
   });
   it('no code when offline or connecting', () => {
@@ -125,7 +125,7 @@ describe('photo shadow', () => {
     '14:32',
     'Friday 20 November',
     'Cloudy · Cambridge',
-    'Use Screen Mirroring or castair.app/connect',
+    'Use Screen Mirroring or castair.app',
   ];
   it('text carries the shadow on a loaded photo, and not without one', () => {
     const view = show({wallpaper: annie});
@@ -153,7 +153,7 @@ const flat = (style: unknown) => Object.assign({}, ...[style].flat(3).filter(Boo
 describe('connect line and credit (B14)', () => {
   it('shows the one connect line, with no per-device wording', () => {
     show();
-    expect(screen.getByText('Use Screen Mirroring or castair.app/connect')).toBeTruthy();
+    expect(screen.getByText('Use Screen Mirroring or castair.app')).toBeTruthy();
     expect(screen.queryByText(/Control Center|Any laptop|iPhone/)).toBeNull();
   });
   it('the credit sits small in the bottom-right corner on a dark shade, inside the drifting layer', () => {
@@ -170,7 +170,7 @@ describe('connect line and credit (B14)', () => {
 });
 
 describe('grey words on a photo', () => {
-  const texts = ['Use Screen Mirroring or castair.app/connect', 'Friday 20 November', 'Cloudy · Cambridge', 'Settings'];
+  const texts = ['Use Screen Mirroring or castair.app', 'Friday 20 November', 'Cloudy · Cambridge', 'Settings'];
   it('turn 90% opaque once the photo loads; bold words stay cream', () => {
     const view = show({wallpaper: annie});
     for (const t of texts) expect(styleOf(t).color).toBe('rgba(244,241,232,.62)');
@@ -215,30 +215,117 @@ describe('left column (B17)', () => {
 });
 
 describe('free-version hint', () => {
+  const FULL = 30 * 60_000;
   it('hint only on the free version', () => {
-    const view = show({freeVersion: true});
-    expect(screen.getByText('Free version · 5-minute casts')).toBeTruthy();
+    const view = show({freeVersion: true, freeLeftMs: FULL});
+    expect(screen.getByText('Free version · 30 min left this week')).toBeTruthy();
     view.unmount();
-    show({freeVersion: false});
-    expect(screen.queryByText('Free version · 5-minute casts')).toBeNull();
+    show({freeVersion: false, freeLeftMs: FULL});
+    expect(screen.queryByText('Free version · 30 min left this week')).toBeNull();
+  });
+  it("shows this week's time left: under a minute, none, or just the free version while unknown", () => {
+    const view = show({freeVersion: true, freeLeftMs: 30_000});
+    expect(screen.getByText('Free version · under a minute left this week')).toBeTruthy();
+    view.rerender(<StandbyScreen {...base} freeVersion freeLeftMs={0} />);
+    expect(screen.getByText('Free version · no free time left until Monday')).toBeTruthy();
+    view.rerender(<StandbyScreen {...base} freeVersion freeLeftMs={null} />);
+    expect(screen.getByText('Free version')).toBeTruthy();
   });
   it('is a way into the plans: focusable, and pressing it calls onOpenPlans', () => {
     const onOpenPlans = jest.fn();
     const onOpenSettings = jest.fn();
-    show({freeVersion: true, onOpenPlans, onOpenSettings});
+    show({freeVersion: true, freeLeftMs: FULL, onOpenPlans, onOpenSettings});
     const hint = screen.getByTestId('standby-free-hint');
     expect(hint.props.focusable).not.toBe(false);
-    fireEvent.press(screen.getByText('Free version · 5-minute casts'));
+    fireEvent.press(screen.getByText('Free version · 30 min left this week'));
     expect(onOpenPlans).toHaveBeenCalledTimes(1);
     expect(onOpenSettings).not.toHaveBeenCalled();
   });
   it('is hidden while a share is connecting, and muted on a photo', () => {
-    const view = show({freeVersion: true, connectingSender: "Sam's iPhone"});
-    expect(screen.queryByText('Free version · 5-minute casts')).toBeNull();
+    const view = show({freeVersion: true, freeLeftMs: FULL, connectingSender: "Sam's iPhone"});
+    expect(screen.queryByText('Free version · 30 min left this week')).toBeNull();
     view.unmount();
-    show({freeVersion: true, wallpaper: annie});
-    expect(styleOf('Free version · 5-minute casts').color).toBe('rgba(244,241,232,.62)');
+    show({freeVersion: true, freeLeftMs: FULL, wallpaper: annie});
+    expect(styleOf('Free version · 30 min left this week').color).toBe('rgba(244,241,232,.62)');
     fireEvent(screen.getByTestId('standby-photo'), 'load');
-    expect(styleOf('Free version · 5-minute casts').color).toBe('rgba(244,241,232,.9)');
+    expect(styleOf('Free version · 30 min left this week').color).toBe('rgba(244,241,232,.9)');
+  });
+});
+
+describe('button row (Apple, Windows, Chrome beside Settings)', () => {
+  const ids = ['settings-button', 'connect-apple', 'connect-windows', 'connect-chrome'];
+  const order = () => {
+    const json = JSON.stringify(screen.toJSON());
+    return ids
+      .filter((id) => json.includes(`"testID":"${id}"`))
+      .sort((a, b) => json.indexOf(`"testID":"${a}"`) - json.indexOf(`"testID":"${b}"`));
+  };
+  it('a free TV: Settings, AirPlay and Cast, no Windows', () => {
+    show({freeVersion: true});
+    expect(order()).toEqual(['settings-button', 'connect-apple', 'connect-chrome']);
+    expect(screen.queryByTestId('connect-windows')).toBeNull();
+  });
+  it('a paid TV: Settings, AirPlay, Windows, Cast, in that order, with their labels', () => {
+    show({showWindows: true});
+    expect(order()).toEqual(ids);
+    for (const label of ['Settings', 'AirPlay', 'Windows', 'Cast']) expect(screen.getByText(label)).toBeTruthy();
+  });
+  it('each button reports its kind', () => {
+    const onOpenConnect = jest.fn();
+    show({showWindows: true, onOpenConnect});
+    fireEvent.press(screen.getByTestId('connect-apple'));
+    fireEvent.press(screen.getByTestId('connect-windows'));
+    fireEvent.press(screen.getByTestId('connect-chrome'));
+    expect(onOpenConnect.mock.calls).toEqual([['apple'], ['windows'], ['chrome']]);
+  });
+  it('a logo button is built like Settings: round, an icon inside and its name below', () => {
+    show();
+    const button = screen.getByTestId('connect-apple');
+    const circle = StyleSheet.flatten(within(button).getByTestId('connect-apple-circle').props.style);
+    expect(circle.borderRadius).toBe(circle.width / 2);
+    expect(within(button).getByTestId('connect-apple-icon')).toBeTruthy();
+    expect(within(button).getByText('AirPlay')).toBeTruthy();
+  });
+  it('the free line sits on its own line under the row and still opens the plans', () => {
+    const onOpenPlans = jest.fn();
+    show({freeVersion: true, freeLeftMs: 30 * 60_000, onOpenPlans});
+    const row = screen.getByTestId('standby-buttons');
+    expect(within(row).queryByTestId('standby-free-hint')).toBeNull();
+    const json = JSON.stringify(screen.toJSON());
+    expect(json.indexOf('"testID":"standby-free-hint"')).toBeGreaterThan(json.indexOf('"testID":"connect-chrome"'));
+    fireEvent.press(screen.getByTestId('standby-free-hint'));
+    expect(onOpenPlans).toHaveBeenCalledTimes(1);
+  });
+  it('hideButtons removes the row and the free line', () => {
+    show({freeVersion: true, freeLeftMs: 1000, showWindows: true, hideButtons: true});
+    for (const id of [...ids, 'standby-free-hint']) expect(screen.queryByTestId(id)).toBeNull();
+    // The clock and the ready card step aside too: only the wallpaper stays behind an overlay.
+    expect(screen.queryByText('Use Screen Mirroring or castair.app')).toBeNull();
+    expect(screen.getByTestId('standby-streams')).toBeTruthy();
+  });
+  it('the row is absent while a share is connecting', () => {
+    show({freeVersion: true, showWindows: true, connectingSender: "Sam's iPhone"});
+    for (const id of ids) expect(screen.queryByTestId(id)).toBeNull();
+  });
+  const preferred = (id: string) => screen.getByTestId(id).props.hasTVPreferredFocus === true;
+  it('no button claims focus over Settings until an overlay has been opened', () => {
+    show({showWindows: true});
+    for (const id of ids.slice(1)) expect(preferred(id)).toBe(false);
+  });
+  it('focusConnect gives focus back to the button that opened the overlay, and says when it has it', () => {
+    const onConnectFocused = jest.fn();
+    show({showWindows: true, focusConnect: 'windows', onConnectFocused});
+    expect(ids.filter(preferred)).toEqual(['connect-windows']);
+    fireEvent(screen.getByTestId('connect-apple'), 'focus');
+    expect(onConnectFocused).not.toHaveBeenCalled();
+    fireEvent(screen.getByTestId('connect-windows'), 'focus');
+    expect(onConnectFocused).toHaveBeenCalledTimes(1);
+  });
+  it('logo icons are tinted cream like the gear', () => {
+    show({showWindows: true});
+    for (const kind of ['apple', 'windows', 'chrome']) {
+      const icon = screen.getByTestId(`connect-${kind}-icon`);
+      expect(StyleSheet.flatten(icon.props.style).tintColor).toBe('#FAF8F2');
+    }
   });
 });

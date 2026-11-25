@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"><!-- Cast mark: a rounded screen outline whose bottom-left corner gives way to a dot and three waves. Drawn from the reference the user supplied (25 November 2026), 14 px margin. -->
+<g fill="none" stroke="#fff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" transform="translate(-42.1 -23.23) scale(1.02)"><path d="M72 92V68a10 10 0 0 1 10-10H262a10 10 0 0 1 10 10V216a10 10 0 0 1-10 10H208"/><path d="M68 190a42 42 0 0 1 42 42"/><path d="M68 154a78 78 0 0 1 78 78"/><path d="M68 118a114 114 0 0 1 114 114"/><circle cx="68" cy="232" r="13" fill="#fff" stroke="none"/></g>
+</svg>
