@@ -21,6 +21,8 @@ import type {UnlockState} from './Unlock';
 export const RECHECK_MS = 21_600_000;
 /** After a check Amazon didn't answer: retry after 1, 5, then 15 minutes, then every 6 hours. */
 export const RETRY_MS = [60_000, 300_000, 900_000];
+/** After a purchase that didn't unlock: ask Amazon again this much later. */
+export const BUY_RECHECK_MS = 60_000;
 
 const LOCKED: UnlockState = {unlocked: false, kind: null, checkedAt: null};
 const ignore = () => undefined;
@@ -117,7 +119,10 @@ export function useUnlock(): {
     async (sku: string) => {
       // A purchase checks again inside Unlock.buy; show what that check saved.
       const result = await unlock.buy(sku);
-      if (result === 'bought') {
+      if (result !== 'bought') {
+        // Amazon's receipts can lag a completed order: ask again in a minute.
+        setTimeout(() => refresh.current().catch(ignore), BUY_RECHECK_MS);
+      } else {
         generation.current += 1;
         const saved = await unlock.cached();
         if (mounted.current) {

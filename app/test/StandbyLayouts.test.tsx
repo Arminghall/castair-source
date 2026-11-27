@@ -103,10 +103,11 @@ describe('Settings, credit and long names', () => {
     fireEvent.press(screen.getByText('Settings'));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
-  it('the credit shows once the photo loads', () => {
+  it("the aurora's credit shows until the daily photo loads, then the photo's", () => {
     show({wallpaper: annie});
-    expect(screen.queryByText(/Unsplash/)).toBeNull();
+    expect(screen.getByText('Photo by Kush Dwivedi on Unsplash')).toBeTruthy();
     fireEvent(screen.getByTestId('standby-photo'), 'load');
+    expect(screen.queryByText('Photo by Kush Dwivedi on Unsplash')).toBeNull();
     expect(screen.getByText('Photo by Annie Spratt on Unsplash')).toBeTruthy();
   });
   it('a 60-character name renders with numberOfLines', () => {
@@ -127,9 +128,9 @@ describe('photo shadow', () => {
     'Cloudy · Cambridge',
     'Use Screen Mirroring or castair.app',
   ];
-  it('text carries the shadow on a loaded photo, and not without one', () => {
+  it('text carries the shadow over the aurora and over a loaded photo', () => {
     const view = show({wallpaper: annie});
-    for (const t of texts) expect(styleOf(t).textShadowColor).toBeUndefined();
+    for (const t of texts) expect(styleOf(t).textShadowColor).toBe('rgba(0,0,0,.55)');
     fireEvent(screen.getByTestId('standby-photo'), 'load');
     for (const t of texts) expect(styleOf(t).textShadowColor).toBe('rgba(0,0,0,.55)');
     view.unmount();
@@ -171,9 +172,9 @@ describe('connect line and credit (B14)', () => {
 
 describe('grey words on a photo', () => {
   const texts = ['Use Screen Mirroring or castair.app', 'Friday 20 November', 'Cloudy · Cambridge', 'Settings'];
-  it('turn 90% opaque once the photo loads; bold words stay cream', () => {
+  it('are 90% opaque over the aurora and a loaded photo; bold words stay cream', () => {
     const view = show({wallpaper: annie});
-    for (const t of texts) expect(styleOf(t).color).toBe('rgba(244,241,232,.62)');
+    for (const t of texts) expect(styleOf(t).color).toBe('rgba(244,241,232,.9)');
     fireEvent(screen.getByTestId('standby-photo'), 'load');
     for (const t of texts) expect(styleOf(t).color).toBe('rgba(244,241,232,.9)');
     expect(styleOf('Screen Mirroring').color).toBe('#FAF8F2');
@@ -241,12 +242,12 @@ describe('free-version hint', () => {
     expect(onOpenPlans).toHaveBeenCalledTimes(1);
     expect(onOpenSettings).not.toHaveBeenCalled();
   });
-  it('is hidden while a share is connecting, and muted on a photo', () => {
+  it('is hidden while a share is connecting, and muted over the aurora or a photo', () => {
     const view = show({freeVersion: true, freeLeftMs: FULL, connectingSender: "Sam's iPhone"});
     expect(screen.queryByText('Free version · 30 min left this week')).toBeNull();
     view.unmount();
     show({freeVersion: true, freeLeftMs: FULL, wallpaper: annie});
-    expect(styleOf('Free version · 30 min left this week').color).toBe('rgba(244,241,232,.62)');
+    expect(styleOf('Free version · 30 min left this week').color).toBe('rgba(244,241,232,.9)');
     fireEvent(screen.getByTestId('standby-photo'), 'load');
     expect(styleOf('Free version · 30 min left this week').color).toBe('rgba(244,241,232,.9)');
   });
@@ -301,7 +302,7 @@ describe('button row (Apple, Windows, Chrome beside Settings)', () => {
     for (const id of [...ids, 'standby-free-hint']) expect(screen.queryByTestId(id)).toBeNull();
     // The clock and the ready card step aside too: only the wallpaper stays behind an overlay.
     expect(screen.queryByText('Use Screen Mirroring or castair.app')).toBeNull();
-    expect(screen.getByTestId('standby-streams')).toBeTruthy();
+    expect(screen.getByTestId('standby-aurora')).toBeTruthy();
   });
   it('the row is absent while a share is connecting', () => {
     show({freeVersion: true, showWindows: true, connectingSender: "Sam's iPhone"});

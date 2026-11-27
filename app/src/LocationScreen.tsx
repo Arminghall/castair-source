@@ -10,7 +10,7 @@ import {findNodeHandle, ScrollView, StyleSheet, Text, TextInput, View} from 'rea
 import {COLORS} from './config';
 import {searchPlaces} from './standby/data';
 import type {PlaceHit} from './standby/data';
-import {Group, MUTED, Note, Row, Section, U} from './SettingsParts';
+import {GLASS, Group, MUTED, Note, Row, Section, U} from './SettingsParts';
 
 const DEBOUNCE_MS = 300;
 
@@ -120,6 +120,6 @@ const styles = StyleSheet.create({
     paddingVertical: 1 * U,
     paddingHorizontal: 1.6 * U,
     borderRadius: 1 * U,
-    backgroundColor: 'rgba(244,241,232,.1)',
+    ...GLASS,
   },
 });

@@ -138,7 +138,7 @@ it('moves the content every 3 minutes, and the streams twice as far', () => {
   const second = shift('standby-content');
   expect(second).not.toEqual(first);
   expect(Math.hypot(second.x, second.y)).toBeCloseTo(Math.hypot(first.x, first.y), 5);
-  const streams = shift('standby-streams');
+  const streams = shift('standby-aurora');
   expect(streams.x).toBeCloseTo(second.x * 2, 5);
   expect(streams.y).toBeCloseTo(second.y * 2, 5);
 });
@@ -152,6 +152,7 @@ const annie: Wallpaper = {
   changesAt: null,
 };
 const CREDIT = 'Photo by Annie Spratt on Unsplash';
+const AURORA = 'Photo by Kush Dwivedi on Unsplash';
 const flatStyle = (id: string) =>
   Object.assign({}, ...[screen.getByTestId(id).props.style].flat(3).filter(Boolean)) as Record<string, unknown>;
 const textStyle = (text: string) =>
@@ -169,21 +170,20 @@ it('with a wallpaper, shows the photo but no credit until it loads', () => {
   expect(within(screen.getByTestId('standby-content')).getByText(CREDIT)).toBeTruthy();
 });
 
-it('a photo that fails to load keeps the green background and shows no credit', () => {
+it("a photo that fails to load keeps the aurora, with the aurora's credit", () => {
   show({wallpaper: annie});
   fireEvent(screen.getByTestId('standby-photo'), 'error');
   expect(flatStyle('standby-photo').opacity).toBe(0);
-  expect(screen.getByTestId('standby-streams')).toBeTruthy();
-  expect(screen.queryByText(/Unsplash/)).toBeNull();
-  expect(screen.queryByTestId('standby-tint')).toBeNull();
+  expect(screen.getByTestId('standby-aurora')).toBeTruthy();
+  expect(screen.getByText(AURORA)).toBeTruthy();
+  expect(screen.queryByText(CREDIT)).toBeNull();
 });
 
 it('a failed photo is retried after WALLPAPER_RETRY_MS, and the credit shows once it loads', () => {
   show({wallpaper: annie});
   const before = screen.getByTestId('standby-photo');
   fireEvent(before, 'error');
-  expect(screen.queryByText(/Unsplash/)).toBeNull();
-  expect(screen.queryByTestId('standby-tint')).toBeNull();
+  expect(screen.getByText(AURORA)).toBeTruthy();
   act(() => jest.advanceTimersByTime(WALLPAPER_RETRY_MS - 1_000));
   expect(screen.getByTestId('standby-photo')).toBe(before);
   act(() => jest.advanceTimersByTime(1_000));
@@ -191,10 +191,10 @@ it('a failed photo is retried after WALLPAPER_RETRY_MS, and the credit shows onc
   const after = screen.getByTestId('standby-photo');
   expect(after).not.toBe(before);
   expect(after.props.source).toEqual({uri: annie.imageUrl});
-  expect(screen.queryByText(/Unsplash/)).toBeNull();
+  expect(screen.queryByText(CREDIT)).toBeNull();
   fireEvent(after, 'load');
   expect(screen.getByText(CREDIT)).toBeTruthy();
-  expect(screen.getByTestId('standby-tint')).toBeTruthy();
+  expect(screen.queryByText(AURORA)).toBeNull();
 });
 
 it('the retry timer is cleared on unmount, on a new URL and on wallpaper null', () => {
@@ -243,42 +243,41 @@ it('a new wallpaper URL hides the credit until the new photo loads', () => {
   expect(screen.getByText(CREDIT)).toBeTruthy();
   const next = {...annie, imageUrl: 'https://images.unsplash.com/photo-2?w=1920', photographer: 'Ben Jones'};
   view.rerender(<StandbyScreen {...base} wallpaper={next} />);
-  expect(screen.queryByText(/Unsplash/)).toBeNull();
+  expect(screen.getByText(AURORA)).toBeTruthy();
   expect(screen.getByTestId('standby-photo').props.source).toEqual({uri: next.imageUrl});
   fireEvent(screen.getByTestId('standby-photo'), 'load');
   expect(screen.getByText('Photo by Ben Jones on Unsplash')).toBeTruthy();
   expect(screen.queryByText(CREDIT)).toBeNull();
 });
 
-it('wallpaper null after a loaded photo: photo and credit gone', () => {
+it('wallpaper null after a loaded photo: back to the aurora and its credit', () => {
   const view = show({wallpaper: annie});
   fireEvent(screen.getByTestId('standby-photo'), 'load');
   view.rerender(<StandbyScreen {...base} wallpaper={null} />);
   expect(screen.queryByTestId('standby-photo')).toBeNull();
-  expect(screen.queryByTestId('standby-tint')).toBeNull();
-  expect(screen.queryByText(/Unsplash/)).toBeNull();
+  expect(screen.queryByText(CREDIT)).toBeNull();
+  expect(screen.getByText(AURORA)).toBeTruthy();
   // The same photo coming back still waits for its load before the credit shows.
   view.rerender(<StandbyScreen {...base} wallpaper={annie} />);
   expect(screen.queryByText(CREDIT)).toBeNull();
 });
 
-it('the tint shows only over a loaded photo', () => {
+it('the same tint covers the aurora and a loaded photo', () => {
   const view = show();
-  expect(screen.queryByTestId('standby-tint')).toBeNull();
+  expect(flatStyle('standby-tint').backgroundColor).toBe('rgba(0,0,0,.35)');
   view.rerender(<StandbyScreen {...base} wallpaper={annie} />);
-  expect(screen.queryByTestId('standby-tint')).toBeNull();
   fireEvent(screen.getByTestId('standby-photo'), 'load');
   expect(flatStyle('standby-tint').backgroundColor).toBe('rgba(0,0,0,.35)');
 });
 
-it('over a loaded photo the text gets a shadow; on green it does not', () => {
+it('the text has a shadow over the aurora and over a loaded photo', () => {
   const view = show({wallpaper: annie});
-  expect(textStyle('14:32').textShadowColor).toBeUndefined();
+  expect(textStyle('14:32').textShadowColor).toBe('rgba(0,0,0,.55)');
   fireEvent(screen.getByTestId('standby-photo'), 'load');
   expect(textStyle('14:32').textShadowColor).toBe('rgba(0,0,0,.55)');
   expect(textStyle('CastAir is ready').textShadowColor).toBe('rgba(0,0,0,.55)');
   view.rerender(<StandbyScreen {...base} wallpaper={null} />);
-  expect(textStyle('14:32').textShadowColor).toBeUndefined();
+  expect(textStyle('14:32').textShadowColor).toBe('rgba(0,0,0,.55)');
 });
 
 it('there is one layout (B17)', () => {

@@ -10,6 +10,12 @@ import {COLORS} from './config';
 
 export const U = Dimensions.get('window').width / 100;
 export const MUTED = 'rgba(244,241,232,.62)';
+/** Black glass, as on the standby card: it keeps text readable over the aurora. */
+export const GLASS = {
+  backgroundColor: 'rgba(18,18,20,.62)',
+  borderWidth: 1,
+  borderColor: 'rgba(255,255,255,.08)',
+} as const;
 
 export const Section = ({children}: {children: string}) => <Text style={styles.section}>{children}</Text>;
 
@@ -83,7 +89,7 @@ const styles = StyleSheet.create({
     marginBottom: 0.6 * U,
     marginLeft: 0.4 * U,
   },
-  group: {borderRadius: 1.2 * U, backgroundColor: 'rgba(244,241,232,.06)', overflow: 'hidden'},
+  group: {borderRadius: 1.2 * U, ...GLASS, overflow: 'hidden'},
   row: {
     flexDirection: 'row',
     alignItems: 'center',

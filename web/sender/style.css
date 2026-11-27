@@ -812,9 +812,23 @@ dialog.overlay[open] {
   gap: 12px;
   align-items: center;
 }
-.soon {
-  font-size: 15px;
-  color: var(--soft);
+/* Amazon's badge, at the primary button's height. Hover adds a ring only, so nothing moves. */
+.store-badge {
+  display: inline-flex;
+  border-radius: 10px;
+  transition: box-shadow 0.15s ease;
+}
+.store-badge img {
+  display: block;
+  width: auto;
+  height: 52px;
+}
+.store-badge:hover {
+  box-shadow: 0 0 0 3px rgba(250, 248, 242, 0.35);
+}
+.store-badge:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--mint);
 }
 
 /* A live miniature of the TV's standby screen. Everything inside is sized in cqw, so it scales as one picture. */

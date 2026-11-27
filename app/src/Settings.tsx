@@ -6,6 +6,7 @@
  */
 import React, {useEffect, useState} from 'react';
 import {BackHandler, Image, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Backdrop} from './Aurora';
 import type {Prefs} from './Prefs';
 import {AboutTab} from './AboutTab';
 import {LocationScreen} from './LocationScreen';
@@ -13,11 +14,10 @@ import {PlansScreen} from './PlansScreen';
 import {SettingsTab} from './SettingsTab';
 import {COLORS} from './config';
 import type {StandbyInfo} from './standby/data';
-import {MUTED, U} from './SettingsParts';
+import {GLASS, MUTED, U} from './SettingsParts';
 import type {UnlockState} from './Unlock';
 
 const MARK = require('./assets/castair_mark.png');
-const BACKGROUND = require('./assets/standby-bg.png');
 
 type Props = {
   receiverName: string;
@@ -93,7 +93,7 @@ export const Settings = ({
 
   return (
     <View style={styles.root}>
-      <Image source={BACKGROUND} resizeMode="stretch" style={styles.background} />
+      <Backdrop />
       {tab === 'plans' ? (
         <PlansScreen
           products={products}
@@ -153,15 +153,14 @@ export const Settings = ({
 
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: COLORS.greenDark},
-  background: {position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: '100%', height: '100%'},
   page: {flex: 1, paddingHorizontal: 4.5 * U, paddingTop: 3.2 * U, paddingBottom: 3 * U},
   head: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2.2 * U},
   brand: {flexDirection: 'row', alignItems: 'center', flex: 1},
   brandMark: {width: 3.2 * U, height: 3.2 * U, marginRight: 1.1 * U},
   brandText: {color: COLORS.cream, fontSize: 1.7 * U, fontWeight: '600'},
-  tabs: {flexDirection: 'row', padding: 0.45 * U, borderRadius: 99, backgroundColor: 'rgba(244,241,232,.08)'},
+  tabs: {flexDirection: 'row', padding: 0.45 * U, borderRadius: 99, ...GLASS},
   tab: {paddingVertical: 0.55 * U, paddingHorizontal: 2.2 * U, borderRadius: 99, marginHorizontal: 0.3 * U},
-  tabOn: {backgroundColor: 'rgba(244,241,232,.16)'},
+  tabOn: {backgroundColor: 'rgba(255,255,255,.14)'},
   tabFocused: {backgroundColor: COLORS.cream},
   tabText: {color: 'rgba(244,241,232,.7)', fontSize: 1.55 * U},
   tabTextOn: {color: COLORS.cream, fontWeight: '600'},

@@ -585,7 +585,7 @@ describe('connect overlays', () => {
     expect(screen.queryByTestId('standby-buttons')).toBeNull();
     // The standby text steps aside; its wallpaper stays behind the overlay's glass.
     expect(screen.queryByTestId('standby-layout')).toBeNull();
-    expect(screen.getByTestId('standby-streams')).toBeTruthy();
+    expect(screen.getByTestId('standby-aurora')).toBeTruthy();
   });
 
   it('a browser share starting closes the overlay', async () => {

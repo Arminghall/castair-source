@@ -48,10 +48,21 @@ const memory = {
   },
 };
 const saved = (): UnlockState | null => JSON.parse(store.get('unlock.state') ?? 'null');
-const makeUnlock = (now = NOW) => new Unlock({iap: PurchasingService, storage: memory, now: () => now});
+const waits: number[] = [];
+const makeUnlock = (now = NOW) =>
+  new Unlock({
+    iap: PurchasingService,
+    storage: memory,
+    now: () => now,
+    sleep: (ms) => {
+      waits.push(ms);
+      return Promise.resolve();
+    },
+  });
 
 beforeEach(() => {
   store.clear();
+  waits.length = 0;
   jest.clearAllMocks();
   amazonHas();
   iap.notifyFulfillment.mockResolvedValue({responseCode: NotifyFulfillmentResponseCode.SUCCESSFUL});
@@ -104,6 +115,20 @@ describe('stateFromReceipts', () => {
       yearly: 'castair.unlimited.yearly',
       lifetime: 'castair.lifetime',
     });
+  });
+});
+
+describe('stateFromReceipts by type', () => {
+  it('an unknown SKU counts by its type: entitlement → lifetime, subscription → subscription', () => {
+    expect(stateFromReceipts([receipt('a', 'x', {productType: 2 as never})], NOW).kind).toBe('lifetime');
+    expect(stateFromReceipts([receipt('b', 'x', {productType: 3 as never})], NOW).kind).toBe('subscription');
+    expect(stateFromReceipts([receipt('c', 'x', {productType: 'SUBSCRIPTION' as never})], NOW).kind).toBe(
+      'subscription',
+    );
+    expect(stateFromReceipts([receipt('d', 'x', {productType: 1 as never})], NOW).unlocked).toBe(false);
+    expect(stateFromReceipts([receipt('e', 'x', {productType: 2 as never, isCancelled: true})], NOW).unlocked).toBe(
+      false,
+    );
   });
 });
 
@@ -264,13 +289,71 @@ describe('Unlock.buy', () => {
     expect(iap.notifyFulfillment).toHaveBeenCalledTimes(1);
   });
 
-  it('buy cancelled → state unchanged', async () => {
+  it('buy cancelled → receipts looked for over ~14 s, then state unchanged', async () => {
     const before: UnlockState = {unlocked: false, kind: null, checkedAt: NOW - DAY};
     store.set('unlock.state', JSON.stringify(before));
     iap.purchase.mockResolvedValue({responseCode: PurchaseResponseCode.FAILED, receipt: null});
     expect(await makeUnlock().buy(SKUS.monthly)).toBe('cancelled');
-    expect(iap.getPurchaseUpdates).not.toHaveBeenCalled();
+    expect(waits).toEqual([2000, 4000, 8000]);
+    expect(iap.getPurchaseUpdates).toHaveBeenCalledTimes(4);
     expect(saved()).toEqual(before);
+    expect(store.has('unlock.bought')).toBe(false);
+  });
+
+  // The missing-key symptom: Amazon charged, but its reply and history have no receipt.
+  it('SUCCESSFUL with no receipt and an empty history still unlocks, and stays unlocked for 3 days', async () => {
+    iap.purchase.mockResolvedValue({responseCode: PurchaseResponseCode.SUCCESSFUL, receipt: null});
+    expect(await makeUnlock().buy(SKUS.yearly)).toBe('bought');
+    expect(saved()).toEqual({unlocked: true, kind: 'subscription', checkedAt: NOW});
+    // Later checks with Amazon's list still empty keep it until 3 days have passed.
+    expect(await makeUnlock(NOW + 2 * DAY).check()).toEqual({
+      unlocked: true,
+      kind: 'subscription',
+      checkedAt: NOW + 2 * DAY,
+    });
+    expect(await makeUnlock(NOW + 3 * DAY).check()).toEqual({unlocked: false, kind: null, checkedAt: NOW + 3 * DAY});
+  });
+
+  it('SUCCESSFUL lifetime with no receipt unlocks as lifetime, also when Amazon is unreachable after', async () => {
+    iap.purchase.mockResolvedValue({responseCode: PurchaseResponseCode.SUCCESSFUL, receipt: null});
+    amazonUnreachable();
+    expect(await makeUnlock().buy(SKUS.lifetime)).toBe('bought');
+    expect(saved()).toEqual({unlocked: true, kind: 'lifetime', checkedAt: NOW});
+  });
+
+  it('a recent purchase never lowers lifetime, and a recent lifetime raises a subscription', async () => {
+    store.set('unlock.bought', JSON.stringify({kind: 'subscription', at: NOW}));
+    amazonHas(receipt('l', 'castair.lifetime'));
+    expect((await makeUnlock().check()).kind).toBe('lifetime');
+    store.set('unlock.bought', JSON.stringify({kind: 'lifetime', at: NOW}));
+    amazonHas(receipt('s', 'castair.unlimited'));
+    expect((await makeUnlock().check()).kind).toBe('lifetime');
+  });
+
+  it('FAILED but the receipt turns up while looking → bought', async () => {
+    iap.purchase.mockResolvedValue({responseCode: PurchaseResponseCode.FAILED, receipt: null});
+    let calls = 0;
+    iap.getPurchaseUpdates.mockImplementation(async () => {
+      calls += 1;
+      return {
+        responseCode: PurchaseUpdatesResponseCode.SUCCESSFUL,
+        receiptList: calls >= 3 ? [receipt('late', 'castair.unlimited')] : [],
+        hasMore: false,
+      };
+    });
+    expect(await makeUnlock().buy(SKUS.monthly)).toBe('bought');
+    expect(saved()).toEqual({unlocked: true, kind: 'subscription', checkedAt: NOW});
+    expect(iap.notifyFulfillment).toHaveBeenCalledWith({
+      receiptId: 'late',
+      fulfillmentResult: FulfillmentResult.FULFILLED,
+    });
+  });
+
+  it('a non-SUCCESSFUL code with an unlocking receipt counts as bought', async () => {
+    const r = receipt('odd', 'castair.lifetime');
+    iap.purchase.mockResolvedValue({responseCode: PurchaseResponseCode.FAILED, receipt: r});
+    expect(await makeUnlock().buy(SKUS.lifetime)).toBe('bought');
+    expect(saved()?.kind).toBe('lifetime');
   });
 
   it('already purchased counts as bought; a bad SKU, no support or an exception is a failure', async () => {
@@ -278,6 +361,8 @@ describe('Unlock.buy', () => {
     iap.purchase.mockResolvedValueOnce({responseCode: PurchaseResponseCode.ALREADY_PURCHASED, receipt: null});
     expect(await makeUnlock().buy(SKUS.lifetime)).toBe('bought');
     expect(saved()?.kind).toBe('lifetime');
+    // An account with nothing: the failures below find no receipt while looking.
+    amazonHas();
     iap.purchase.mockResolvedValueOnce({responseCode: PurchaseResponseCode.INVALID_SKU, receipt: null});
     expect(await makeUnlock().buy('castair.nope')).toBe('failed');
     iap.purchase.mockResolvedValueOnce({responseCode: PurchaseResponseCode.NOT_SUPPORTED, receipt: null});
@@ -302,7 +387,8 @@ describe('overlapping checks', () => {
     // Long enough for the buy's own check to finish, were it not waiting.
     await new Promise((resolve) => setImmediate(resolve));
     answerFirst({responseCode: PurchaseUpdatesResponseCode.SUCCESSFUL, receiptList: [], hasMore: false});
-    expect((await slow).unlocked).toBe(false);
+    // The slow check finishes after the purchase was recorded, so it already counts it.
+    expect((await slow).unlocked).toBe(true);
     expect(await buying).toBe('bought');
     expect(saved()).toEqual({unlocked: true, kind: 'lifetime', checkedAt: NOW});
     expect(await unlock.cached()).toEqual({unlocked: true, kind: 'lifetime', checkedAt: NOW});

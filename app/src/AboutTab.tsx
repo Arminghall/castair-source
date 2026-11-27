@@ -9,7 +9,8 @@ import React from 'react';
 import {Image, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {BUILD} from './buildInfo';
 import {COLORS, SOURCE_NOTE} from './config';
-import {MUTED, U} from './SettingsParts';
+import {AURORA_CREDIT} from './Aurora';
+import {GLASS, MUTED, U} from './SettingsParts';
 
 const UPSTREAM_URL = 'github.com/regulad/RosellaView';
 const LICENSE_URL = 'https://www.gnu.org/licenses/agpl-3.0.html';
@@ -78,6 +79,7 @@ export const AboutTab = () => (
     <Heading>Weather, location and photos</Heading>
     <Text style={styles.small}>Weather data: MET Norway (CC BY 4.0)</Text>
     <Text style={styles.small}>Place names: GeoNames (CC BY 4.0)</Text>
+    <Text style={styles.small}>Background: {AURORA_CREDIT}</Text>
     <Text style={styles.small}>Wallpaper photos: Unsplash</Text>
 
     <Heading>Trademarks</Heading>
@@ -95,7 +97,15 @@ export const AboutTab = () => (
 
 const styles = StyleSheet.create({
   scroll: {flex: 1},
-  content: {paddingHorizontal: 1.5 * U, paddingBottom: 4 * U},
+  // One black-glass panel behind all the text, so it reads well over the aurora.
+  content: {
+    ...GLASS,
+    borderRadius: 1.2 * U,
+    paddingHorizontal: 2.4 * U,
+    paddingTop: 2.2 * U,
+    paddingBottom: 2.4 * U,
+    marginBottom: 3 * U,
+  },
   titleRow: {flexDirection: 'row', alignItems: 'center'},
   titleText: {flexShrink: 1},
   mark: {width: 6 * U, height: 6 * U, marginRight: 1.6 * U},

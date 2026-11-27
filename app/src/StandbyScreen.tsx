@@ -1,7 +1,8 @@
 /*
  * The standby screen: what staff see on the TV when nothing is being shared.
- * The shell draws the background (the green streams, or an Unsplash photo once
- * it has loaded, under a dark tint) and hands the content to the layout.
+ * The shell draws the background (CastAir's aurora, or the daily Unsplash photo
+ * once it has loaded, under a dark tint, each with its credit) and hands the
+ * content to the layout.
  * Everything drifts a few pixels every 3 minutes so nothing burns in.
  *
  * Copyright (C) 2026 Arminghall
@@ -10,14 +11,13 @@
 import React, {useEffect, useState} from 'react';
 import {Image, StyleSheet, View} from 'react-native';
 import type {Prefs} from './Prefs';
+import {AURORA, AURORA_CREDIT} from './Aurora';
 import {COLORS, WALLPAPER_RETRY_MS} from './config';
 import type {StandbyInfo, Wallpaper} from './standby/data';
 import {StandbyLayout} from './standby/StandbyLayout';
 import {Credit, SCREEN, U, useDrift, useOffline} from './standby/parts';
 import {buildView} from './standby/view';
 import type {ConnectKind} from './standby/view';
-
-const BACKGROUND = require('./assets/standby-bg.png');
 
 type Props = {
   name: string;
@@ -99,14 +99,14 @@ export const StandbyScreen = ({
   }, [failedUrl, imageUrl]);
 
   const onPhoto = wallpaper !== null && loadedUrl === wallpaper.imageUrl;
-  const credit = onPhoto ? `Photo by ${wallpaper.photographer} on Unsplash` : null;
+  const credit = onPhoto ? `Photo by ${wallpaper.photographer} on Unsplash` : AURORA_CREDIT;
 
   const view = buildView({name, info, prefs, nowMs, country, offline, connectingSender, shareCode, credit});
   const drift2 = {transform: [{translateX: dx * 2}, {translateY: dy * 2}]};
 
   return (
     <View style={styles.root}>
-      <Image testID="standby-streams" source={BACKGROUND} resizeMode="stretch" style={[styles.background, drift2]} />
+      <Image testID="standby-aurora" source={AURORA} resizeMode="cover" style={[styles.background, drift2]} />
       {wallpaper ? (
         <Image
           // A new URL (or a retry) is a new image: a late load from the old one can't reveal it early.
@@ -122,7 +122,7 @@ export const StandbyScreen = ({
           style={[styles.background, drift2, !onPhoto && styles.hidden]}
         />
       ) : null}
-      {onPhoto ? <View testID="standby-tint" style={styles.tint} /> : null}
+      <View testID="standby-tint" style={styles.tint} />
       <View testID="standby-content" style={[styles.content, {transform: [{translateX: dx}, {translateY: dy}]}]}>
         {/* Behind a connect overlay the clock, card and buttons step aside: only the wallpaper shows through its glass. */}
         {hideButtons ? null : (

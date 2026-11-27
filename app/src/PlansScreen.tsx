@@ -7,14 +7,13 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import React, {useState} from 'react';
-import {Image, StyleSheet, Text, View} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
+import {Backdrop} from './Aurora';
 import type {Product} from '@amazon-devices/keplerscript-appstore-iap-lib';
 import {COLORS} from './config';
 import {Group, MUTED, Note, Row, U} from './SettingsParts';
 import {SKUS} from './Unlock';
 import type {UnlockState} from './Unlock';
-
-const BACKGROUND = require('./assets/standby-bg.png');
 
 type Props = {
   /** Amazon's products by SKU; a missing one hides its button. */
@@ -107,7 +106,9 @@ export const PlansScreen = ({
 
   const thanks = confirmed && state.unlocked;
   let status: string | null = null;
-  if (failed || (productsLoaded && list.length === 0)) {
+  if (busy) {
+    status = 'Checking with Amazon…';
+  } else if (failed || (productsLoaded && list.length === 0)) {
     status = "Couldn't reach Amazon. Try again.";
   } else if (list.length === 0) {
     status = 'Loading prices…';
@@ -115,7 +116,7 @@ export const PlansScreen = ({
 
   return (
     <View style={styles.root}>
-      <Image source={BACKGROUND} resizeMode="stretch" style={styles.background} />
+      <Backdrop />
       <View style={styles.page}>
         <Text style={[styles.title, subtitle && !thanks ? styles.titleOverSubtitle : null]}>
           {thanks ? 'Unlimited casts are on. Thank you!' : title}
@@ -147,7 +148,6 @@ export const PlansScreen = ({
 
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: COLORS.greenDark},
-  background: {position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: '100%', height: '100%'},
   page: {flex: 1, paddingHorizontal: 12 * U, paddingTop: 6 * U, paddingBottom: 3 * U},
   title: {color: COLORS.cream, fontSize: 3 * U, fontWeight: '600', marginBottom: 2.4 * U},
   titleOverSubtitle: {marginBottom: 0.8 * U},

@@ -6,6 +6,14 @@
  * Amazon's purchasing library is a Vega system bundle the OS provides at
  * runtime (DECISIONS B18): the app bundle doesn't contain it.
  *
+ * Real (store-signed) purchases need assets/raw/AppstoreAuthenticationKey.pem,
+ * CastAir's public key from the Developer Console (Release Tracks → View →
+ * Public Key). Without it the library can't validate receipts and silently
+ * drops them: Amazon takes the money and says thanks, but purchase() has no
+ * receipt and getPurchaseUpdates is an empty SUCCESSFUL list. The IAP App
+ * Tester sandbox doesn't need the key, so sandbox tests can't catch this
+ * (found on Waveband, 27 November 2026). Builds 1 to 5 shipped without it.
+ *
  * Copyright (C) 2026 Arminghall
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
@@ -14,6 +22,7 @@ import {
   FulfillmentResult,
   NotifyFulfillmentResponseCode,
   ProductDataResponseCode,
+  ProductType,
   PurchaseResponseCode,
   PurchaseUpdatesResponseCode,
 } from '@amazon-devices/keplerscript-appstore-iap-lib';
@@ -31,11 +40,28 @@ export const SKUS = {
 
 /** How long the last successful check is trusted when Amazon can't be reached. */
 export const CACHE_MS = 14 * 86_400_000;
+/**
+ * After Amazon says a purchase went through, how long an answer without its
+ * receipt is taken as "Amazon hasn't caught up" rather than "not bought".
+ */
+export const BOUGHT_GRACE_MS = 3 * 86_400_000;
+/**
+ * After a purchase Amazon didn't confirm in its reply, look for the receipt
+ * after these waits (about 14 seconds in all).
+ */
+export const CONFIRM_WAITS_MS = [0, 2000, 4000, 8000];
 
 const LOCKED: UnlockState = {unlocked: false, kind: null, checkedAt: null};
 const STATE_KEY = 'unlock.state';
 const FULFILLED_KEY = 'unlock.fulfilled';
+const BOUGHT_KEY = 'unlock.bought';
 const SUBSCRIPTION_SKUS: readonly string[] = [SKUS.parent, SKUS.monthly, SKUS.yearly];
+
+type Bought = {kind: 'subscription' | 'lifetime'; at: number};
+
+/** The library uses numbers (ENTITLED = 2, SUBSCRIPTION = 3); accept the name too. */
+const isType = (r: Receipt, type: ProductType, name: string) =>
+  (r.productType as unknown) === type || String(r.productType ?? '').toUpperCase() === name;
 
 /** The parts of Amazon's PurchasingService CastAir uses. */
 export type Iap = Pick<
@@ -53,13 +79,24 @@ export type Storage = {
  * The state Amazon's receipts give, checked at `now`. Any receipt that isn't
  * cancelled (or expired) unlocks: a subscription receipt carries the parent
  * SKU on the TV, with an empty termSku. Lifetime wins over a subscription.
+ * CastAir sells only these items, so a receipt counts if its SKU matches OR
+ * its type does (an entitlement is Lifetime, a subscription is Unlimited):
+ * neither field alone is trusted (Waveband's review purchase, 27 November
+ * 2026, wasn't recognised by SKU).
  */
 export function stateFromReceipts(receipts: Receipt[], now: number): UnlockState {
-  const active = receipts.filter((r) => !r.isCancelled);
-  if (active.some((r) => r.sku === SKUS.lifetime)) {
+  const active = receipts.filter((r) => r && !r.isCancelled);
+  if (active.some((r) => r.sku === SKUS.lifetime || isType(r, ProductType.ENTITLED, 'ENTITLED'))) {
     return {unlocked: true, kind: 'lifetime', checkedAt: now};
   }
-  if (active.some((r) => SUBSCRIPTION_SKUS.includes(r.sku) || SUBSCRIPTION_SKUS.includes(r.termSku))) {
+  if (
+    active.some(
+      (r) =>
+        SUBSCRIPTION_SKUS.includes(r.sku) ||
+        SUBSCRIPTION_SKUS.includes(r.termSku) ||
+        isType(r, ProductType.SUBSCRIPTION, 'SUBSCRIPTION'),
+    )
+  ) {
     return {unlocked: true, kind: 'subscription', checkedAt: now};
   }
   return {unlocked: false, kind: null, checkedAt: now};
@@ -81,14 +118,26 @@ export class Unlock {
   private readonly iap: Iap;
   private readonly storage: Storage;
   private readonly now: () => number;
+  private readonly sleep: (ms: number) => Promise<void>;
   private answered = false;
   // Checks run one at a time, in order: an older check never saves over a newer one.
   private queue: Promise<unknown> = Promise.resolve();
 
-  constructor({iap, storage, now}: {iap: Iap; storage: Storage; now: () => number}) {
+  constructor({
+    iap,
+    storage,
+    now,
+    sleep = (ms) => new Promise<void>((done) => setTimeout(done, ms)),
+  }: {
+    iap: Iap;
+    storage: Storage;
+    now: () => number;
+    sleep?: (ms: number) => Promise<void>;
+  }) {
     this.iap = iap;
     this.storage = storage;
     this.now = now;
+    this.sleep = sleep;
   }
 
   /**
@@ -111,11 +160,14 @@ export class Unlock {
   }
 
   /**
-   * Opens Amazon's purchase screen for `sku`. After a purchase (or when the
-   * account already owns it) checks again, so the state is saved unlocked.
-   * Amazon reports a purchase the viewer backs out of as FAILED, with no
-   * receipt, so FAILED counts as cancelled; a bad SKU, no purchasing on this
-   * device, or an error is a failure.
+   * Opens Amazon's purchase screen for `sku`. When Amazon says it went through
+   * (or the account already owns it), that is bought: remembered for 3 days in
+   * case Amazon's receipts lag, then checked again so the state is saved
+   * unlocked. Any other answer may still hide a completed order, so the
+   * receipts are looked for over about 14 seconds before giving up. Amazon
+   * reports a purchase the viewer backs out of as FAILED, with no receipt, so
+   * FAILED with nothing found counts as cancelled; a bad SKU, no purchasing on
+   * this device, or an error is a failure.
    */
   async buy(sku: string): Promise<'bought' | 'cancelled' | 'failed'> {
     let res;
@@ -124,17 +176,32 @@ export class Unlock {
     } catch {
       return 'failed';
     }
-    switch (res.responseCode) {
-      case PurchaseResponseCode.SUCCESSFUL:
-      case PurchaseResponseCode.ALREADY_PURCHASED:
-        // Count the new receipt even if Amazon's history doesn't list it yet.
-        await this.checkWith(res.receipt ? [res.receipt] : []);
-        return 'bought';
-      case PurchaseResponseCode.FAILED:
-        return 'cancelled';
-      default:
-        return 'failed';
+    const code = res?.responseCode;
+    const receipt = res?.receipt ?? null;
+    const fromReceipt = receipt ? stateFromReceipts([receipt], this.now()) : LOCKED;
+    if (
+      code === PurchaseResponseCode.SUCCESSFUL ||
+      code === PurchaseResponseCode.ALREADY_PURCHASED ||
+      fromReceipt.unlocked
+    ) {
+      const kind = fromReceipt.kind ?? (sku === SKUS.lifetime ? 'lifetime' : 'subscription');
+      await this.save(BOUGHT_KEY, {kind, at: this.now()} satisfies Bought);
+      // Count the new receipt even if Amazon's history doesn't list it yet.
+      await this.checkWith(receipt ? [receipt] : []);
+      return 'bought';
     }
+    // Amazon may still have taken the order: look for its receipt for a while.
+    for (const wait of CONFIRM_WAITS_MS) {
+      if (wait) {
+        await this.sleep(wait);
+      }
+      const found = await this.receipts();
+      if (found !== null && stateFromReceipts(found, this.now()).unlocked) {
+        await this.checkWith(found);
+        return 'bought';
+      }
+    }
+    return code === PurchaseResponseCode.FAILED ? 'cancelled' : 'failed';
   }
 
   /** Amazon's products (local prices, trial period) by SKU; none if Amazon fails. */
@@ -164,7 +231,7 @@ export class Unlock {
     if (fromAmazon === null) {
       // Amazon's history can't be read; a purchase it just answered still counts.
       const cached = await this.cached();
-      const bought = stateFromReceipts(extra, this.now());
+      const bought = await this.withRecentPurchase(stateFromReceipts(extra, this.now()));
       if (!bought.unlocked || cached.kind === 'lifetime') {
         return cached;
       }
@@ -174,9 +241,33 @@ export class Unlock {
     }
     const known = new Set(fromAmazon.map((r) => r.receiptId));
     const receipts = [...fromAmazon, ...extra.filter((r) => !known.has(r.receiptId))];
-    const state = stateFromReceipts(receipts, this.now());
+    const state = await this.withRecentPurchase(stateFromReceipts(receipts, this.now()));
     await this.fulfil(receipts);
     await this.save(STATE_KEY, state);
+    return state;
+  }
+
+  /**
+   * `state`, raised to what Amazon said was bought in the last 3 days (or
+   * since a clock that now reads earlier), so a purchase whose receipt Amazon
+   * hasn't listed yet isn't taken away. Lifetime is never lowered.
+   */
+  private async withRecentPurchase(state: UnlockState): Promise<UnlockState> {
+    if (state.kind === 'lifetime') {
+      return state;
+    }
+    const bought = (await this.load(BOUGHT_KEY)) as Partial<Bought> | null;
+    const ok =
+      bought !== null &&
+      typeof bought === 'object' &&
+      (bought.kind === 'lifetime' || bought.kind === 'subscription') &&
+      typeof bought.at === 'number';
+    if (!ok || this.now() - (bought.at as number) >= BOUGHT_GRACE_MS) {
+      return state;
+    }
+    if (bought.kind === 'lifetime' || !state.unlocked) {
+      return {unlocked: true, kind: bought.kind as Bought['kind'], checkedAt: this.now()};
+    }
     return state;
   }
 
